@@ -1,0 +1,25 @@
+{
+  "name": "com.yourcompany.advancedwebrequest",
+  "version": "1.0.0",
+  "displayName": "Advanced Web Request",
+  "description": "A production-ready HTTP client built on top of Unity's UnityWebRequest with modern async/await support, JWT authentication, retry policies, and structured error handling.",
+  "unity": "2021.3",
+  "keywords": [
+    "http",
+    "rest",
+    "api",
+    "web",
+    "request",
+    "unitask",
+    "jwt",
+    "async"
+  ],
+  "author": {
+    "name": "Your Company",
+    "url": "https://yourcompany.com"
+  },
+  "dependencies": {
+    "com.cysharp.unitask": "2.3.3",
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  }
+}
