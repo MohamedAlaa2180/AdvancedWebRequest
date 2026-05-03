@@ -2,6 +2,14 @@
 
 A production-ready HTTP client built on top of Unity's UnityWebRequest with modern features for mobile and PC games.
 
+## Install (UPM)
+
+Add via **Package Manager → + → Add package from git URL** using:
+
+`https://github.com/MohamedAlaa2180/AdvancedWebRequest.git?path=Assets/AdvancedWebRequest#release/latest`
+
+Or add to `Packages/manifest.json` as `com.mohamedalaa2180.advancedwebrequest` with that URL. See the [repository README](https://github.com/MohamedAlaa2180/AdvancedWebRequest/blob/release/latest/README.md) for details.
+
 ## Features
 
 - ✅ **UniTask async/await** - Clean async code with proper cancellation

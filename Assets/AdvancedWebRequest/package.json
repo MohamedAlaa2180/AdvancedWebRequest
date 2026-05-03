@@ -1,9 +1,12 @@
 {
-  "name": "com.yourcompany.advancedwebrequest",
+  "name": "com.mohamedalaa2180.advancedwebrequest",
   "version": "1.0.0",
   "displayName": "Advanced Web Request",
   "description": "A production-ready HTTP client built on top of Unity's UnityWebRequest with modern async/await support, JWT authentication, retry policies, and structured error handling.",
   "unity": "2021.3",
+  "documentationUrl": "https://github.com/MohamedAlaa2180/AdvancedWebRequest/blob/release/latest/Assets/AdvancedWebRequest/README.md",
+  "changelogUrl": "https://github.com/MohamedAlaa2180/AdvancedWebRequest/blob/release/latest/Assets/AdvancedWebRequest/CHANGELOG.md",
+  "licensesUrl": "https://github.com/MohamedAlaa2180/AdvancedWebRequest/blob/release/latest/Assets/AdvancedWebRequest/LICENSE.md",
   "keywords": [
     "http",
     "rest",
@@ -15,11 +18,11 @@
     "async"
   ],
   "author": {
-    "name": "Your Company",
-    "url": "https://yourcompany.com"
+    "name": "Mohamed Alaa",
+    "url": "https://github.com/MohamedAlaa2180"
   },
   "dependencies": {
-    "com.cysharp.unitask": "2.3.3",
+    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
     "com.unity.nuget.newtonsoft-json": "3.2.1"
   }
 }
