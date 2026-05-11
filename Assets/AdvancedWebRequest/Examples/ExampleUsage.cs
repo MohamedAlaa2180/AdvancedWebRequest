@@ -35,11 +35,11 @@ namespace AdvancedWebRequest.Examples
             try
             {
                 Debug.Log("Fetching user...");
-                var user = await _client.GetAsync<User>("/users/1", _cts.Token);
+                var user = await _client.Request("/users/1").Get().SendAsync<User>(_cts.Token);
                 Debug.Log($"User loaded: {user.name} ({user.email})");
 
                 Debug.Log("Fetching posts...");
-                var posts = await _client.GetAsync<Post[]>("/posts?userId=1", _cts.Token);
+                var posts = await _client.Request("/posts?userId=1").Get().SendAsync<Post[]>(_cts.Token);
                 Debug.Log($"Loaded {posts.Length} posts");
 
                 Debug.Log("Creating new post...");
@@ -49,7 +49,7 @@ namespace AdvancedWebRequest.Examples
                     title = "Test Post",
                     body = "This is a test post"
                 };
-                var createdPost = await _client.PostAsync<Post>("/posts", newPost, _cts.Token);
+                var createdPost = await _client.Request("/posts").Post().WithBody(newPost).SendAsync<Post>(_cts.Token);
                 Debug.Log($"Created post with ID: {createdPost.id}");
             }
             catch (ApiException ex)

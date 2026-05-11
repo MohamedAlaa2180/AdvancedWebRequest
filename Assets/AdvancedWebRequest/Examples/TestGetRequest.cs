@@ -49,15 +49,11 @@ namespace AdvancedWebRequest.Examples
             {
                 string fullPath = $"{_endpoint}?email={Uri.EscapeDataString(_email)}";
 
-                var options = RequestOptions.WithTimeout(_timeout);
-
-                var response = await _client.SendJsonAsync<UserIdResponse>(
-                    fullPath,
-                    "GET",
-                    null,
-                    _cts.Token,
-                    options
-                );
+                var response = await _client
+                    .Request(fullPath)
+                    .Get()
+                    .WithTimeout(_timeout)
+                    .SendAsync<UserIdResponse>(_cts.Token);
 
                 Debug.Log($"<color=green>✓ Success! User ID: {response.userId}</color>");
             }

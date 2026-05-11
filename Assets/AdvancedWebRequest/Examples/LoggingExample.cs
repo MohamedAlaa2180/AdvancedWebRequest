@@ -70,14 +70,14 @@ namespace AdvancedWebRequest.Examples
             try
             {
                 Debug.Log($"  Test 1: Successful GET request");
-                var user = await client.GetAsync<User>("/users/1", _cts.Token);
+                var user = await client.Request("/users/1").Get().SendAsync<User>(_cts.Token);
                 Debug.Log($"  <color=green>Got user: {user.name}</color>");
                 
                 await UniTask.Delay(500);
 
                 Debug.Log($"\n  Test 2: Successful POST request");
                 var newPost = new CreatePost { userId = 1, title = "Test", body = "Content" };
-                var post = await client.PostAsync<Post>("/posts", newPost, _cts.Token);
+                var post = await client.Request("/posts").Post().WithBody(newPost).SendAsync<Post>(_cts.Token);
                 Debug.Log($"  <color=green>Created post: {post.id}</color>");
 
                 await UniTask.Delay(500);
@@ -85,7 +85,7 @@ namespace AdvancedWebRequest.Examples
                 Debug.Log($"\n  Test 3: Error request (404)");
                 try
                 {
-                    await client.GetAsync<User>("/users/99999", _cts.Token);
+                    await client.Request("/users/99999").Get().SendAsync<User>(_cts.Token);
                 }
                 catch (ApiException ex)
                 {

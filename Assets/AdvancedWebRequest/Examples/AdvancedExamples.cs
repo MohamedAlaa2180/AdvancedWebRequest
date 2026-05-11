@@ -53,7 +53,7 @@ namespace AdvancedWebRequest.Examples
             
             try
             {
-                var user = await _client.GetAsync<UserDto>("/api/users/me", _cts.Token);
+                var user = await _client.Request("/api/users/me").Get().SendAsync<UserDto>(_cts.Token);
                 Debug.Log($"User: {user.username}");
             }
             catch (ApiException ex)
@@ -74,7 +74,11 @@ namespace AdvancedWebRequest.Examples
             
             try
             {
-                var response = await _client.PostAsync<LoginResponse>("/api/auth/login", request, _cts.Token);
+                var response = await _client
+                    .Request("/api/auth/login")
+                    .Post()
+                    .WithBody(request)
+                    .SendAsync<LoginResponse>(_cts.Token);
                 
                 if (_client is ApiClient client)
                 {
@@ -93,20 +97,13 @@ namespace AdvancedWebRequest.Examples
         {
             _cts = new CancellationTokenSource();
             
-            var options = new RequestOptions
-            {
-                TimeoutSeconds = 60f
-            };
-            
             try
             {
-                var data = await _client.SendJsonAsync<LargeDataResponse>(
-                    "/api/data/large",
-                    "GET",
-                    null,
-                    _cts.Token,
-                    options
-                );
+                var data = await _client
+                    .Request("/api/data/large")
+                    .Get()
+                    .WithTimeout(60f)
+                    .SendAsync<LargeDataResponse>(_cts.Token);
                 
                 Debug.Log($"Loaded {data.Items.Length} items");
             }
@@ -122,13 +119,12 @@ namespace AdvancedWebRequest.Examples
             
             try
             {
-                var result = await _client.SendJsonAsync<TransactionResponse>(
-                    "/api/transactions",
-                    "POST",
-                    new { amount = 100, currency = "USD" },
-                    _cts.Token,
-                    RequestOptions.NoRetry
-                );
+                var result = await _client
+                    .Request("/api/transactions")
+                    .Post()
+                    .WithBody(new { amount = 100, currency = "USD" })
+                    .NoRetry()
+                    .SendAsync<TransactionResponse>(_cts.Token);
                 
                 Debug.Log($"Transaction ID: {result.TransactionId}");
             }
@@ -144,7 +140,7 @@ namespace AdvancedWebRequest.Examples
             
             try
             {
-                await _client.PostAsync<object>("/api/users", new { username = "" }, _cts.Token);
+                await _client.Request("/api/users").Post().WithBody(new { username = "" }).SendAsync(_cts.Token);
             }
             catch (ApiException ex)
             {
@@ -178,9 +174,9 @@ namespace AdvancedWebRequest.Examples
             try
             {
                 var (user, posts, comments) = await UniTask.WhenAll(
-                    _client.GetAsync<UserDto>("/api/users/1", _cts.Token),
-                    _client.GetAsync<PostDto[]>("/api/posts?userId=1", _cts.Token),
-                    _client.GetAsync<CommentDto[]>("/api/comments?userId=1", _cts.Token)
+                    _client.Request("/api/users/1").Get().SendAsync<UserDto>(_cts.Token),
+                    _client.Request("/api/posts?userId=1").Get().SendAsync<PostDto[]>(_cts.Token),
+                    _client.Request("/api/comments?userId=1").Get().SendAsync<CommentDto[]>(_cts.Token)
                 );
                 
                 Debug.Log($"Loaded user with {posts.Length} posts and {comments.Length} comments");
@@ -197,7 +193,7 @@ namespace AdvancedWebRequest.Examples
             
             try
             {
-                var task = _client.GetAsync<UserDto>("/api/users/me", _cts.Token);
+                var task = _client.Request("/api/users/me").Get().SendAsync<UserDto>(_cts.Token);
                 
                 await UniTask.Delay(TimeSpan.FromSeconds(1), cancellationToken: _cts.Token);
                 

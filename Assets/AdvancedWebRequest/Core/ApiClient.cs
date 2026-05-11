@@ -19,27 +19,7 @@ namespace AdvancedWebRequest.Core
             _logger = logger ?? new DefaultLogger();
         }
 
-        public async UniTask<T> GetAsync<T>(string path, CancellationToken ct = default)
-        {
-            return await SendJsonAsync<T>(path, "GET", null, ct);
-        }
-
-        public async UniTask<T> PostAsync<T>(string path, object body, CancellationToken ct = default)
-        {
-            return await SendJsonAsync<T>(path, "POST", body, ct);
-        }
-
-        public async UniTask<T> PutAsync<T>(string path, object body, CancellationToken ct = default)
-        {
-            return await SendJsonAsync<T>(path, "PUT", body, ct);
-        }
-
-        public async UniTask<T> DeleteAsync<T>(string path, CancellationToken ct = default)
-        {
-            return await SendJsonAsync<T>(path, "DELETE", null, ct);
-        }
-
-        public async UniTask<T> SendJsonAsync<T>(
+        internal async UniTask<T> SendJsonAsync<T>(
             string path,
             string method,
             object body = null,
@@ -131,7 +111,25 @@ namespace AdvancedWebRequest.Core
 
                 var requestTask = request.SendWebRequest().ToUniTask(cancellationToken: linkedCts.Token);
 
-                var (hasRequestCompleted, _) = await UniTask.WhenAny(requestTask, timeoutTask);
+                bool hasRequestCompleted;
+                try
+                {
+                    (hasRequestCompleted, _) = await UniTask.WhenAny(requestTask, timeoutTask);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (ApiException)
+                {
+                    throw;
+                }
+                catch (Exception)
+                {
+                    timeoutCts.Cancel();
+                    var duration = Time.realtimeSinceStartup - startTime;
+                    return await HandleResponseAsync<T>(request, spec, duration);
+                }
 
                 if (!hasRequestCompleted)
                 {
@@ -153,8 +151,8 @@ namespace AdvancedWebRequest.Core
 
                 timeoutCts.Cancel();
 
-                var duration = Time.realtimeSinceStartup - startTime;
-                return await HandleResponseAsync<T>(request, spec, duration);
+                var duration2 = Time.realtimeSinceStartup - startTime;
+                return await HandleResponseAsync<T>(request, spec, duration2);
             }
             catch (OperationCanceledException)
             {

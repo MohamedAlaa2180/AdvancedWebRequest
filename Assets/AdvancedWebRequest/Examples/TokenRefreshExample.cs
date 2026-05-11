@@ -53,7 +53,11 @@ namespace AdvancedWebRequest.Examples
             try
             {
                 var request = new RefreshTokenRequest { RefreshToken = _refreshToken };
-                var response = await _authClient.PostAsync<RefreshTokenResponse>("/api/auth/refresh", request, ct);
+                var response = await _authClient
+                    .Request("/api/auth/refresh")
+                    .Post()
+                    .WithBody(request)
+                    .SendAsync<RefreshTokenResponse>(ct);
 
                 _accessToken = response.AccessToken;
                 _refreshToken = response.RefreshToken;
@@ -119,7 +123,11 @@ namespace AdvancedWebRequest.Examples
 
             try
             {
-                var loginResponse = await tempClient.PostAsync<LoginResponse>("/api/auth/login", loginRequest, _cts.Token);
+                var loginResponse = await tempClient
+                    .Request("/api/auth/login")
+                    .Post()
+                    .WithBody(loginRequest)
+                    .SendAsync<LoginResponse>(_cts.Token);
 
                 _tokenProvider = new RefreshableTokenProvider(
                     _baseUrl,
@@ -142,12 +150,12 @@ namespace AdvancedWebRequest.Examples
         {
             try
             {
-                var user = await _client.GetAsync<UserDto>("/api/users/me", _cts.Token);
+                var user = await _client.Request("/api/users/me").Get().SendAsync<UserDto>(_cts.Token);
                 Debug.Log($"User: {user.username}");
 
                 await UniTask.Delay(TimeSpan.FromHours(2), cancellationToken: _cts.Token);
 
-                var userAgain = await _client.GetAsync<UserDto>("/api/users/me", _cts.Token);
+                var userAgain = await _client.Request("/api/users/me").Get().SendAsync<UserDto>(_cts.Token);
                 Debug.Log($"User (after token refresh): {userAgain.username}");
             }
             catch (ApiException ex)
