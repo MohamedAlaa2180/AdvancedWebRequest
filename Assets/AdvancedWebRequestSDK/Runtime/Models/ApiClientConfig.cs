@@ -23,9 +23,14 @@ namespace AdvancedWebRequest.Core
         public bool LogResponseBody { get; set; } = false;
         public int MaxLogBodyLength { get; set; } = 500;
 
+        /// <summary>
+        /// Assigned by the Editor assembly to inject editor preferences into new configs.
+        /// </summary>
+        public static System.Action<ApiClientConfig> OnCreate;
+
         public static ApiClientConfig Create(string baseUrl)
         {
-            return new ApiClientConfig
+            var config = new ApiClientConfig
             {
                 BaseUrl = baseUrl,
                 DefaultHeaders = new Dictionary<string, string>
@@ -34,6 +39,10 @@ namespace AdvancedWebRequest.Core
                     { "User-Agent", $"Unity/{UnityEngine.Application.version}" }
                 }
             };
+
+            OnCreate?.Invoke(config);
+
+            return config;
         }
     }
 }
