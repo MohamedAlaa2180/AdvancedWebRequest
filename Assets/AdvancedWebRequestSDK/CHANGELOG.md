@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-05-14
+
+### Added
+- **Editor Settings**: New Project Settings page for centralized logging and default request configuration
+  - Configurable log level, request/response body logging, max log body length, and default timeout
+  - Settings stored in EditorPrefs for per-developer preferences
+  - Automatic application to all ApiClient instances via delegate bridge pattern
+- **ApiService class**: New helper class to reduce boilerplate in MonoBehaviour examples
+  - Encapsulates ApiClient and CancellationTokenSource lifecycle management
+  - Provides convenient Token property and Cancel/Dispose methods
+  - Eliminates repetitive setup code in example classes
+
+### Changed
+- **API Consolidation**: Simplified public API surface to enforce fluent builder pattern
+  - Made `SendJsonAsync` internal (previously public)
+  - Removed public `GetAsync`, `PostAsync`, `PutAsync`, `DeleteAsync` methods
+  - All requests now use fluent API: `client.Request(path).Get().SendAsync<T>()`
+- **Package Structure**: Reorganized into standard Unity Package Manager layout
+  - `Runtime/` folder for core SDK code with Runtime assembly definition
+  - `Editor/` folder for Editor-only code with Editor assembly definition
+  - `Samples~/` folder for example code with Samples assembly definition
+- **Example Classes**: Refactored all examples to follow new patterns
+  - Use ApiService instead of direct ApiClient + CancellationTokenSource
+  - Removed manual Debug.Log calls (logging now driven by SDK settings)
+  - Simplified exception handling (throw instead of log-and-consume)
+  - Removed serialized logging configuration fields
+
+### Fixed
+- **Error Handling**: Improved exception categorization in request pipeline
+  - UnityWebRequestException now properly mapped to specific ApiException categories
+  - Fixed issue where network errors were incorrectly classified as "Unknown"
+  - OperationCanceledException and ApiException now properly propagated
+
+### Technical
+- Added delegate bridge pattern (ApiClientConfig.OnCreate) to apply Editor settings without cross-assembly dependencies
+- Improved assembly definition structure with proper platform restrictions
+- Enhanced error routing through HandleResponseAsync for better categorization
+
 ## [1.0.0] - 2026-05-03
 
 ### Added - Core Features

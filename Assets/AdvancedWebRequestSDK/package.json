@@ -1,6 +1,6 @@
 {
   "name": "com.mohamedalaa2180.advancedwebrequest",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "Advanced Web Request",
   "description": "A production-ready HTTP client built on top of Unity's UnityWebRequest with modern async/await support, JWT authentication, retry policies, and structured error handling.",
   "unity": "2021.3",
