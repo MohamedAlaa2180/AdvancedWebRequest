@@ -1,4 +1,3 @@
-using System;
 using System.Threading;
 using UnityEngine;
 using Cysharp.Threading.Tasks;
@@ -8,85 +7,44 @@ namespace AdvancedWebRequest.Examples
 {
     public class FluentApiExample : MonoBehaviour
     {
-        private ApiClient _client;
-        private CancellationTokenSource _cts;
+        private ApiService _api;
 
-        void Start()
-        {
-            var config = ApiClientConfig.Create("https://jsonplaceholder.typicode.com");
-            _client = new ApiClient(config);
-            
-            DemoFluentApi().Forget();
-        }
+        void Awake() => _api = new ApiService("https://jsonplaceholder.typicode.com");
+        void OnDestroy() => _api.Dispose();
+
+        void Start() => DemoFluentApi().Forget();
 
         async UniTask DemoFluentApi()
         {
-            _cts = new CancellationTokenSource();
+            var user = await _api.Client
+                .Request("/users/1")
+                .Get()
+                .WithTimeout(10f)
+                .SendAsync<User>(_api.Token);
 
-            try
-            {
-                var user = await _client
-                    .Request("/users/1")
-                    .Get()
-                    .WithTimeout(10f)
-                    .SendAsync<User>(_cts.Token);
-                
-                Debug.Log($"User: {user.name}");
+            var newPost = await _api.Client
+                .Request("/posts")
+                .Post()
+                .WithBody(new { title = "Test", body = "Content", userId = 1 })
+                .NoRetry()
+                .WithTimeout(15f)
+                .SendAsync<Post>(_api.Token);
 
-                var newPost = await _client
-                    .Request("/posts")
-                    .Post()
-                    .WithBody(new { title = "Test", body = "Content", userId = 1 })
-                    .NoRetry()
-                    .WithTimeout(15f)
-                    .SendAsync<Post>(_cts.Token);
-                
-                Debug.Log($"Created post: {newPost.id}");
+            await _api.Client
+                .Request("/posts/1")
+                .Delete()
+                .WithHeader("X-Custom-Header", "value")
+                .SendAsync(_api.Token);
 
-                await _client
-                    .Request("/posts/1")
-                    .Delete()
-                    .WithHeader("X-Custom-Header", "value")
-                    .SendAsync(_cts.Token);
-                
-                Debug.Log("Post deleted");
-
-                var updatedPost = await _client
-                    .Request("/posts/1")
-                    .Put()
-                    .WithBody(new { title = "Updated", body = "New content", userId = 1 })
-                    .WithRetry(RetryPolicy.Aggressive)
-                    .SendAsync<Post>(_cts.Token);
-                
-                Debug.Log($"Updated post: {updatedPost.title}");
-            }
-            catch (ApiException ex)
-            {
-                Debug.LogError($"Request failed: {ex}");
-            }
+            var updatedPost = await _api.Client
+                .Request("/posts/1")
+                .Put()
+                .WithBody(new { title = "Updated", body = "New content", userId = 1 })
+                .WithRetry(RetryPolicy.Aggressive)
+                .SendAsync<Post>(_api.Token);
         }
 
-        void OnDestroy()
-        {
-            _cts?.Cancel();
-            _cts?.Dispose();
-        }
-
-        [Serializable]
-        public class User
-        {
-            public int id;
-            public string name;
-            public string email;
-        }
-
-        [Serializable]
-        public class Post
-        {
-            public int id;
-            public string title;
-            public string body;
-            public int userId;
-        }
+        [System.Serializable] public class User { public int id; public string name; public string email; }
+        [System.Serializable] public class Post { public int id; public string title; public string body; public int userId; }
     }
 }

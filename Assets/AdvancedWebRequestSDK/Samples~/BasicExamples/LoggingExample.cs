@@ -1,134 +1,44 @@
-using System;
-using System.Threading;
 using UnityEngine;
 using Cysharp.Threading.Tasks;
 using AdvancedWebRequest.Core;
 
 namespace AdvancedWebRequest.Examples
 {
+    /// <summary>
+    /// Demonstrates API requests with logging driven by Project Settings.
+    /// Configure log level via Edit > Project Settings > Advanced Web Request.
+    /// </summary>
     public class LoggingExample : MonoBehaviour
     {
-        [Header("Test Different Log Levels")]
-        [SerializeField] private bool _testNone = false;
-        [SerializeField] private bool _testErrors = false;
-        [SerializeField] private bool _testBasic = true;
-        [SerializeField] private bool _testDetailed = false;
-        [SerializeField] private bool _testVerbose = false;
+        private ApiService _api;
 
-        private CancellationTokenSource _cts;
+        void Awake() => _api = new ApiService("https://jsonplaceholder.typicode.com");
+        void OnDestroy() => _api.Dispose();
 
-        void Start()
+        void Start() => RunRequests().Forget();
+
+        async UniTask RunRequests()
         {
-            RunLoggingTests().Forget();
-        }
+            var user = await _api.Client.Request("/users/1").Get().SendAsync<User>(_api.Token);
 
-        async UniTask RunLoggingTests()
-        {
-            _cts = new CancellationTokenSource();
+            var newPost = new CreatePost { userId = 1, title = "Test", body = "Content" };
+            var post = await _api.Client.Request("/posts").Post().WithBody(newPost).SendAsync<Post>(_api.Token);
 
-            if (_testNone)
-            {
-                Debug.Log("\n<color=yellow>=== Testing LogLevel.None (No logs) ===</color>");
-                await TestWithLogLevel(LogLevel.None);
-            }
+            await UniTask.Delay(500);
 
-            if (_testErrors)
-            {
-                Debug.Log("\n<color=yellow>=== Testing LogLevel.Errors (Only errors) ===</color>");
-                await TestWithLogLevel(LogLevel.Errors);
-            }
-
-            if (_testBasic)
-            {
-                Debug.Log("\n<color=yellow>=== Testing LogLevel.Basic (Request/Response summary) ===</color>");
-                await TestWithLogLevel(LogLevel.Basic);
-            }
-
-            if (_testDetailed)
-            {
-                Debug.Log("\n<color=yellow>=== Testing LogLevel.Detailed (With body) ===</color>");
-                await TestWithLogLevel(LogLevel.Detailed);
-            }
-
-            if (_testVerbose)
-            {
-                Debug.Log("\n<color=yellow>=== Testing LogLevel.Verbose (Everything) ===</color>");
-                await TestWithLogLevel(LogLevel.Verbose);
-            }
-        }
-
-        async UniTask TestWithLogLevel(LogLevel logLevel)
-        {
-            var config = ApiClientConfig.Create("https://jsonplaceholder.typicode.com");
-            config.LogLevel = logLevel;
-            config.LogRequestBody = true;
-            config.LogResponseBody = true;
-            config.MaxLogBodyLength = 200;
-
-            var client = new ApiClient(config);
-
+            // Intentional 404 — observe error logging in the console
             try
             {
-                Debug.Log($"  Test 1: Successful GET request");
-                var user = await client.Request("/users/1").Get().SendAsync<User>(_cts.Token);
-                Debug.Log($"  <color=green>Got user: {user.name}</color>");
-                
-                await UniTask.Delay(500);
-
-                Debug.Log($"\n  Test 2: Successful POST request");
-                var newPost = new CreatePost { userId = 1, title = "Test", body = "Content" };
-                var post = await client.Request("/posts").Post().WithBody(newPost).SendAsync<Post>(_cts.Token);
-                Debug.Log($"  <color=green>Created post: {post.id}</color>");
-
-                await UniTask.Delay(500);
-
-                Debug.Log($"\n  Test 3: Error request (404)");
-                try
-                {
-                    await client.Request("/users/99999").Get().SendAsync<User>(_cts.Token);
-                }
-                catch (ApiException ex)
-                {
-                    Debug.Log($"  <color=orange>Caught expected error: {ex.Category}</color>");
-                }
+                await _api.Client.Request("/users/99999").Get().SendAsync<User>(_api.Token);
             }
-            catch (Exception ex)
+            catch (ApiException)
             {
-                Debug.LogError($"  Unexpected error: {ex.Message}");
+                throw;
             }
-
-            await UniTask.Delay(1000);
         }
 
-        void OnDestroy()
-        {
-            _cts?.Cancel();
-            _cts?.Dispose();
-        }
-
-        [Serializable]
-        public class User
-        {
-            public int id;
-            public string name;
-            public string email;
-        }
-
-        [Serializable]
-        public class Post
-        {
-            public int id;
-            public int userId;
-            public string title;
-            public string body;
-        }
-
-        [Serializable]
-        public class CreatePost
-        {
-            public int userId;
-            public string title;
-            public string body;
-        }
+        [System.Serializable] public class User       { public int id; public string name; public string email; }
+        [System.Serializable] public class Post       { public int id; public int userId; public string title; public string body; }
+        [System.Serializable] public class CreatePost { public int userId; public string title; public string body; }
     }
 }
