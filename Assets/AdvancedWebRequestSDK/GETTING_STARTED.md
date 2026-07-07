@@ -1,33 +1,46 @@
 # Getting Started with Advanced Web Request
 
-## Installation (3 Steps)
+## Installation
 
-### Step 1: Install Dependencies
-Via Unity Package Manager, add:
+### Step 1: Add the package (UPM)
 
-1. **UniTask**: 
-   - Add package from git URL: `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask`
+Via **Package Manager → + → Add package from git URL**:
 
-2. **Newtonsoft.Json**: 
-   - Add package by name: `com.unity.nuget.newtonsoft-json`
+```text
+https://github.com/MohamedAlaa2180/AdvancedWebRequest.git?path=Assets/AdvancedWebRequestSDK#release/latest
+```
 
-### Step 2: Import Advanced Web Request
-The `AdvancedWebRequest` folder is already in your `Assets` directory.
+Or add to `Packages/manifest.json`:
 
-### Step 3: Test Installation
-1. Create a new GameObject in your scene
-2. Attach the `ExampleUsage` script (found in `Assets/AdvancedWebRequest/Examples/`)
-3. Run the scene
-4. Check Console - you should see successful API calls
+```json
+"com.mohamedalaa2180.advancedwebrequest": "https://github.com/MohamedAlaa2180/AdvancedWebRequest.git?path=Assets/AdvancedWebRequestSDK#release/latest"
+```
 
-## Your First API Call (2 Minutes)
+UniTask and Newtonsoft.Json are installed automatically.
 
-### 1. Create an API Manager
+### Step 2: Configure defaults
+
+Open **Edit → Project Settings → Advanced Web Request** and set log level, body logging, and default timeout.
+
+### Step 3: Import samples (optional)
+
+In Package Manager → **Advanced Web Request** → **Samples** → import **Basic Examples**.
+
+### Step 4: Test installation
+
+1. Attach `ExampleUsage` from the imported samples to a GameObject
+2. Run the scene
+3. Check the Console for automatic API logs
+
+## Your first API call (2 minutes)
+
+### 1. Create an API manager
 
 Create `Assets/Scripts/ApiManager.cs`:
 
 ```csharp
 using UnityEngine;
+using System.Threading;
 using AdvancedWebRequest.Core;
 
 public class ApiManager : MonoBehaviour
@@ -35,7 +48,7 @@ public class ApiManager : MonoBehaviour
     private static ApiManager _instance;
     public static ApiManager Instance => _instance;
 
-    private ApiClient _client;
+    private ApiService _api;
     private SimpleTokenProvider _tokenProvider;
 
     void Awake()
@@ -44,7 +57,9 @@ public class ApiManager : MonoBehaviour
         {
             _instance = this;
             DontDestroyOnLoad(gameObject);
-            InitializeClient();
+
+            _tokenProvider = new SimpleTokenProvider();
+            _api = new ApiService(ApiClientConfig.Create("https://your-api.com"), _tokenProvider);
         }
         else
         {
@@ -52,24 +67,16 @@ public class ApiManager : MonoBehaviour
         }
     }
 
-    void InitializeClient()
-    {
-        // Replace with your API URL
-        var config = ApiClientConfig.Create("https://your-api.com");
-        _tokenProvider = new SimpleTokenProvider();
-        _client = new ApiClient(config, _tokenProvider);
-    }
+    void OnDestroy() => _api?.Dispose();
 
-    public ApiClient Client => _client;
-    
-    public void SetToken(string token)
-    {
-        _tokenProvider.SetToken(token);
-    }
+    public ApiClient Client => _api.Client;
+    public CancellationToken Token => _api.Token;
+
+    public void SetToken(string token) => _tokenProvider.SetToken(token);
 }
 ```
 
-### 2. Use in Your Game
+### 2. Use in your game
 
 Create `Assets/Scripts/GameController.cs`:
 
@@ -78,37 +85,20 @@ using System;
 using UnityEngine;
 using Cysharp.Threading.Tasks;
 using AdvancedWebRequest.Core;
-using System.Threading;
 
 public class GameController : MonoBehaviour
 {
-    private CancellationTokenSource _cts;
-
     void Start()
     {
-        _cts = new CancellationTokenSource();
         LoadPlayerData().Forget();
     }
 
     async UniTask LoadPlayerData()
     {
-        try
-        {
-            var player = await ApiManager.Instance.Client
-                .GetAsync<PlayerData>("/api/player", _cts.Token);
-            
-            Debug.Log($"Welcome, {player.name}!");
-        }
-        catch (ApiException ex)
-        {
-            Debug.LogError($"Failed: {ex.Message}");
-        }
-    }
-
-    void OnDestroy()
-    {
-        _cts?.Cancel();
-        _cts?.Dispose();
+        var player = await ApiManager.Instance.Client
+            .Request("/api/player")
+            .Get()
+            .SendAsync<PlayerData>(ApiManager.Instance.Token);
     }
 
     [Serializable]
@@ -120,40 +110,46 @@ public class GameController : MonoBehaviour
 }
 ```
 
-### 3. Run!
-That's it! You now have a production-ready HTTP client.
+### 3. Run
 
-## Common Tasks
+That is it — you now have a production-ready HTTP client with automatic logging.
 
-### Login and Store Token
+## Common tasks
+
+### Login and store token
 
 ```csharp
 public async UniTask<bool> Login(string email, string password)
 {
     var request = new { email, password };
-    
+
     try
     {
         var response = await ApiManager.Instance.Client
-            .PostAsync<LoginResponse>("/api/auth/login", request);
-        
+            .Request("/api/auth/login")
+            .Post()
+            .WithBody(request)
+            .SendAsync<LoginResponse>(ApiManager.Instance.Token);
+
         ApiManager.Instance.SetToken(response.token);
         return true;
     }
-    catch (ApiException ex)
+    catch (ApiException)
     {
-        Debug.LogError($"Login failed: {ex.Message}");
         return false;
     }
 }
 ```
 
-### Handle Different Errors
+### Handle different errors
 
 ```csharp
 try
 {
-    await ApiManager.Instance.Client.GetAsync<User>("/api/users/me");
+    await ApiManager.Instance.Client
+        .Request("/api/users/me")
+        .Get()
+        .SendAsync<User>(ApiManager.Instance.Token);
 }
 catch (ApiException ex)
 {
@@ -169,88 +165,71 @@ catch (ApiException ex)
             ShowMessage("Connection is slow");
             break;
         default:
-            ShowMessage($"Error: {ex.Message}");
-            break;
+            throw;
     }
 }
 ```
 
-### Load Multiple Things in Parallel
+### Load multiple things in parallel
 
 ```csharp
 var client = ApiManager.Instance.Client;
+var token = ApiManager.Instance.Token;
 
 var (player, inventory, quests) = await UniTask.WhenAll(
-    client.GetAsync<PlayerData>("/api/player", ct),
-    client.GetAsync<Item[]>("/api/inventory", ct),
-    client.GetAsync<Quest[]>("/api/quests", ct)
+    client.Request("/api/player").Get().SendAsync<PlayerData>(token),
+    client.Request("/api/inventory").Get().SendAsync<Item[]>(token),
+    client.Request("/api/quests").Get().SendAsync<Quest[]>(token)
 );
 ```
 
-### Custom Timeout for Large Data
+### Custom timeout for large data
 
 ```csharp
-var options = RequestOptions.WithTimeout(60f);
-
-var data = await ApiManager.Instance.Client.SendJsonAsync<LargeData>(
-    "/api/large-data",
-    "GET",
-    null,
-    ct,
-    options
-);
+var data = await ApiManager.Instance.Client
+    .Request("/api/large-data")
+    .Get()
+    .WithTimeout(60f)
+    .SendAsync<LargeData>(ApiManager.Instance.Token);
 ```
 
-### No Retry for Critical Operations
+### No retry for critical operations
 
 ```csharp
-var result = await ApiManager.Instance.Client.SendJsonAsync<Result>(
-    "/api/payment",
-    "POST",
-    paymentData,
-    ct,
-    RequestOptions.NoRetry
-);
+var result = await ApiManager.Instance.Client
+    .Request("/api/payment")
+    .Post()
+    .WithBody(paymentData)
+    .NoRetry()
+    .SendAsync<Result>(ApiManager.Instance.Token);
 ```
 
-## Next Steps
+## Next steps
 
-1. **Read [README.md](README.md)** - Full documentation
-2. **Check [FEATURES.md](FEATURES.md)** - All features explained
-3. **Review [Examples/](Examples/)** - Code examples for every feature
-4. **See [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Architecture details
+1. **Read [README.md](README.md)** — Full documentation
+2. **Check [FEATURES.md](FEATURES.md)** — All features explained
+3. **Review samples** — Import **Basic Examples** from Package Manager
+4. **See [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** — Architecture details
 
-## Quick Tips
+## Quick tips
 
-### Always Use CancellationToken
+### Use ApiService for lifecycle
+
 ```csharp
-private CancellationTokenSource _cts;
+private ApiService _api;
 
-void Start()
-{
-    _cts = new CancellationTokenSource();
-}
-
-void OnDestroy()
-{
-    _cts?.Cancel();
-    _cts?.Dispose();
-}
+void Awake() => _api = new ApiService("https://api.example.com");
+void OnDestroy() => _api.Dispose();
 ```
 
-### Use `.Forget()` for Fire-and-Forget
+### Use `.Forget()` for fire-and-forget
+
 ```csharp
-LoadData().Forget();  // Start but don't await
+LoadData().Forget();
 ```
 
-### Check API Response in Browser First
-Before coding, test your API with:
-- Postman
-- Browser DevTools
-- curl
+### Define your DTOs
 
-### Define Your DTOs
-Create classes matching your API responses:
 ```csharp
 [Serializable]
 public class User
@@ -261,52 +240,41 @@ public class User
 }
 ```
 
-### Use SerializeField for Inspector
-```csharp
-[SerializeField] private string _apiUrl = "https://api.example.com";
-```
-
 ## Troubleshooting
 
-### Build Errors
-- Ensure UniTask is installed
-- Ensure Newtonsoft.Json is installed
-- Check assembly definition references
+### Build errors
 
-### Timeout Immediately
-- Check if API URL is correct
-- Verify internet connection
-- Increase timeout: `RequestOptions.WithTimeout(60f)`
+- Ensure the UPM path is `Assets/AdvancedWebRequestSDK`
+- Ensure UniTask and Newtonsoft.Json resolved in Package Manager
 
-### Token Not Working
+### GetAsync / PostAsync not found
+
+Use the fluent API (removed in 1.1.0):
+
+```csharp
+await client.Request("/path").Get().SendAsync<T>(ct);
+```
+
+### Token not working
+
 - Verify token format: `Authorization: Bearer <token>`
-- Check token expiry
 - Ensure `SetToken()` was called
 
-### JSON Parse Error
+### JSON parse error
+
 - Verify DTO class matches API response
 - Add `[Serializable]` attribute
-- Check field names (case-sensitive)
+- Field names are case-sensitive
 
-## Need Help?
-
-1. Check the Console for detailed error messages
-2. Review example scripts in `Examples/` folder
-3. Read error categories in `ApiException`
-4. Enable logging to see request/response details
-
-## Production Checklist
+## Production checklist
 
 Before going live:
+
 - [ ] Use HTTPS (not HTTP)
 - [ ] Store tokens securely (not PlayerPrefs)
 - [ ] Add proper error handling
+- [ ] Set log level to `Errors` or `None` for release builds
 - [ ] Test on mobile network
 - [ ] Test with airplane mode
 - [ ] Handle token refresh
-- [ ] Add loading indicators
 - [ ] Test cancellation on scene changes
-- [ ] Log errors to analytics
-- [ ] Add retry strategies for critical operations
-
-Happy coding! 🚀

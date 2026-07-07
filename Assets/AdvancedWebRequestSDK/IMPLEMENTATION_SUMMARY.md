@@ -1,43 +1,51 @@
 # Implementation Summary
 
-## What Was Built
+## What was built
 
 A production-ready HTTP client library built on top of Unity's `UnityWebRequest` with modern features for mobile and PC games.
 
-## Architecture Overview
+## Architecture overview
 
 ```
-AdvancedWebRequest/
-├── Core/
-│   ├── ApiClient.cs          # Main client with request execution
-│   └── RequestBuilder.cs     # Fluent API builder
-├── Models/
-│   ├── ApiClientConfig.cs    # Client configuration
-│   ├── ApiException.cs       # Typed exception with categories
-│   ├── ApiErrorResponse.cs   # Structured error DTO
-│   ├── RequestSpec.cs        # Internal request specification
-│   └── RequestOptions.cs     # Per-request options
-├── Policies/
-│   └── RetryPolicy.cs        # Retry logic with backoff
-├── Interfaces/
-│   ├── ITokenProvider.cs     # JWT token provider abstraction
-│   └── ILogger.cs            # Logging abstraction
-├── Utils/
-│   ├── SimpleTokenProvider.cs    # Basic token provider
-│   └── DefaultLogger.cs          # Console logger
-└── Examples/
-    ├── ExampleUsage.cs           # Basic usage
-    ├── AdvancedExamples.cs       # All features demonstrated
-    ├── FluentApiExample.cs       # Fluent API usage
-    └── TokenRefreshExample.cs    # Token refresh pattern
+Assets/AdvancedWebRequestSDK/
+├── Runtime/
+│   ├── Core/
+│   │   ├── ApiClient.cs          # Main client with request execution
+│   │   ├── ApiService.cs         # ApiClient + CancellationTokenSource wrapper
+│   │   └── RequestBuilder.cs     # Fluent API builder (public entry point)
+│   ├── Models/
+│   │   ├── ApiClientConfig.cs    # Client configuration + OnCreate delegate
+│   │   ├── ApiException.cs       # Typed exception with categories
+│   │   ├── ApiErrorResponse.cs   # Structured error DTO
+│   │   ├── RequestSpec.cs        # Internal request specification
+│   │   └── RequestOptions.cs     # Per-request options
+│   ├── Policies/
+│   │   └── RetryPolicy.cs        # Retry logic with backoff
+│   ├── Interfaces/
+│   │   ├── ITokenProvider.cs     # JWT token provider abstraction
+│   │   └── ILogger.cs            # Logging abstraction
+│   └── Utils/
+│       ├── SimpleTokenProvider.cs
+│       └── DefaultLogger.cs
+├── Editor/
+│   └── AdvancedWebRequestSettings.cs  # Project Settings page (EditorPrefs)
+└── Samples~/BasicExamples/
+    ├── ExampleUsage.cs
+    ├── AdvancedExamples.cs
+    ├── FluentApiExample.cs
+    ├── LoggingExample.cs
+    ├── TokenRefreshExample.cs
+    └── TestGetRequest.cs
 ```
 
-## Key Components
+## Key components
 
-### 1. ApiClient (Core)
-The main entry point for all HTTP requests.
+### 1. ApiClient (core)
+
+The main HTTP executor. **`SendJsonAsync` is internal** — consumers use `RequestBuilder` instead.
 
 **Responsibilities:**
+
 - Execute HTTP requests via UnityWebRequest
 - Handle JSON serialization/deserialization
 - Manage timeouts and cancellation
@@ -45,381 +53,159 @@ The main entry point for all HTTP requests.
 - Inject authentication tokens
 - Log requests/responses
 
-**Key Methods:**
-```csharp
-UniTask<T> GetAsync<T>(string path, CancellationToken ct)
-UniTask<T> PostAsync<T>(string path, object body, CancellationToken ct)
-UniTask<T> PutAsync<T>(string path, object body, CancellationToken ct)
-UniTask<T> DeleteAsync<T>(string path, CancellationToken ct)
-UniTask<T> SendJsonAsync<T>(string path, string method, object body, CancellationToken ct, RequestOptions options)
-```
+### 2. RequestBuilder (public API)
 
-### 2. ApiException (Error Model)
-Comprehensive exception type with categorization.
+The only public way to make requests:
 
-**Categories:**
-- `Canceled` - User/system canceled
-- `Timeout` - Request exceeded timeout
-- `NetworkError` - Connection issues
-- `Unauthorized` (401)
-- `Forbidden` (403)
-- `NotFound` (404)
-- `RateLimited` (429)
-- `BadRequest` (4xx)
-- `ServerError` (5xx)
-- `JsonParseError` - Invalid JSON
-- `Unknown` - Unexpected errors
-
-**Properties:**
-```csharp
-ApiErrorCategory Category
-int? StatusCode
-ApiErrorResponse StructuredError  // Parsed error DTO (if available)
-string RawResponseBody            // Fallback raw text
-string Url
-string Method
-```
-
-### 3. RetryPolicy (Reliability)
-Configurable retry logic with exponential backoff.
-
-**Default Behavior:**
-- Max 3 retries
-- Base delay: 1 second
-- Max delay: 10 seconds
-- Jitter enabled (reduces thundering herd)
-
-**Retry Triggers:**
-- Timeout
-- Network errors
-- HTTP 429 (Rate Limited)
-- HTTP 5xx (Server Errors)
-
-**Formula:**
-```
-delay = min(baseDelay * 2^(attempt-1), maxDelay)
-delay += random(0, delay * 0.3)  // jitter
-```
-
-### 4. ITokenProvider (Auth)
-Abstraction for JWT token management.
-
-**Implementations:**
-- `SimpleTokenProvider` - Static token storage
-- `RefreshableTokenProvider` (example) - Auto-refresh pattern
-
-**Interface:**
-```csharp
-UniTask<string> GetAccessTokenAsync(CancellationToken ct)
-```
-
-### 5. RequestBuilder (Fluent API)
-Chainable request builder for readable code.
-
-**Example:**
 ```csharp
 await client
     .Request("/users/1")
     .Get()
     .WithTimeout(10f)
     .WithHeader("X-Custom", "value")
-    .SendAsync<User>();
+    .SendAsync<User>(ct);
 ```
 
-## Implementation Details
+Methods: `Get()`, `Post()`, `Put()`, `Delete()`, `WithBody()`, `WithTimeout()`, `WithRetry()`, `NoRetry()`, `WithHeader()`.
 
-### Timeout Handling
-Uses `UniTask.WhenAny` to race the request against a timeout:
+### 3. ApiService (convenience)
+
+Owns `ApiClient` + `CancellationTokenSource` for MonoBehaviours and services:
 
 ```csharp
-var timeoutTask = UniTask.Delay(TimeSpan.FromSeconds(timeout), ct);
-var requestTask = request.SendWebRequest().ToUniTask(ct);
-var completedTask = await UniTask.WhenAny(requestTask, timeoutTask);
+var api = new ApiService("https://api.example.com");
+await api.Client.Request("/path").Get().SendAsync<T>(api.Token);
+api.Dispose();
+```
 
-if (completedTask == 1) // timeout won
+### 4. AdvancedWebRequestSettings (Editor)
+
+Registered via `[SettingsProvider]` at **Project/Advanced Web Request**. Applies EditorPrefs to `ApiClientConfig.Create()` through the `ApiClientConfig.OnCreate` delegate bridge (avoids Runtime → Editor assembly reference).
+
+### 5. ApiException (error model)
+
+**Categories:** `Canceled`, `Timeout`, `NetworkError`, `Unauthorized`, `Forbidden`, `NotFound`, `RateLimited`, `BadRequest`, `ServerError`, `JsonParseError`, `Unknown`
+
+### 6. RetryPolicy (reliability)
+
+Default: 3 retries, exponential backoff with jitter. Retries on timeout, network errors, 429, and 5xx.
+
+## Usage patterns
+
+### Simple GET
+
+```csharp
+var user = await api.Client.Request("/api/users/me").Get().SendAsync<User>(api.Token);
+```
+
+### POST with body
+
+```csharp
+var response = await api.Client
+    .Request("/api/auth/login")
+    .Post()
+    .WithBody(loginRequest)
+    .SendAsync<LoginResponse>(api.Token);
+```
+
+### Custom timeout
+
+```csharp
+await api.Client
+    .Request("/api/large-data")
+    .Get()
+    .WithTimeout(60f)
+    .SendAsync<LargeData>(api.Token);
+```
+
+### No retry
+
+```csharp
+await api.Client
+    .Request("/api/payment")
+    .Post()
+    .WithBody(paymentData)
+    .NoRetry()
+    .SendAsync<Result>(api.Token);
+```
+
+### Parallel requests
+
+```csharp
+var client = api.Client;
+var token = api.Token;
+
+var (user, posts, comments) = await UniTask.WhenAll(
+    client.Request("/api/users/1").Get().SendAsync<User>(token),
+    client.Request("/api/posts?userId=1").Get().SendAsync<Post[]>(token),
+    client.Request("/api/comments?userId=1").Get().SendAsync<Comment[]>(token)
+);
+```
+
+### Error handling
+
+```csharp
+try
 {
-    request.Abort();
-    throw new ApiException(ApiErrorCategory.Timeout, ...);
+    await api.Client.Request("/api/users/me").Get().SendAsync<User>(api.Token);
 }
-```
-
-### JSON Parsing (Thread-Safe)
-Switches to thread pool for JSON parsing to avoid main thread blocking:
-
-```csharp
-await UniTask.SwitchToThreadPool();
-var result = JsonConvert.DeserializeObject<T>(responseBody);
-await UniTask.SwitchToMainThread();
-```
-
-### Error Response Parsing
-Tries to parse structured error, falls back to raw text:
-
-```csharp
-ApiErrorResponse structuredError = null;
-try {
-    structuredError = JsonConvert.DeserializeObject<ApiErrorResponse>(responseBody);
-} catch {
-    // Fallback to raw text
-}
-```
-
-### Resource Cleanup
-Proper disposal of UnityWebRequest in finally block:
-
-```csharp
-try {
-    // Execute request
-}
-finally {
-    request?.Dispose();
+catch (ApiException ex)
+{
+    switch (ex.Category)
+    {
+        case ApiErrorCategory.Unauthorized: break;
+        case ApiErrorCategory.NetworkError: break;
+        default: throw;
+    }
 }
 ```
 
 ## Configuration
 
-### Basic Setup
+### Editor defaults (recommended)
+
+**Edit → Project Settings → Advanced Web Request**
+
+### Code overrides
+
 ```csharp
 var config = ApiClientConfig.Create("https://api.example.com");
-var tokenProvider = new SimpleTokenProvider("your-jwt");
-var client = new ApiClient(config, tokenProvider);
-```
-
-### Advanced Setup
-```csharp
-var config = ApiClientConfig.Create("https://api.example.com");
-
-// Custom headers
 config.DefaultHeaders["X-App-Version"] = Application.version;
-config.DefaultHeaders["X-Platform"] = Application.platform.ToString();
-
-// Custom retry policy
-config.DefaultRetryPolicy = new RetryPolicy
-{
-    MaxRetries = 5,
-    BaseDelaySeconds = 0.5f,
-    MaxDelaySeconds = 5f,
-    UseJitter = true
-};
-
-// Custom request defaults
-config.DefaultRequestOptions = new RequestOptions
-{
-    TimeoutSeconds = 60f
-};
-
-// Custom logger
-var logger = new CustomLogger();
-var client = new ApiClient(config, tokenProvider, logger);
+config.DefaultRetryPolicy = RetryPolicy.Aggressive;
+var api = new ApiService(config, tokenProvider);
 ```
-
-## Usage Patterns
-
-### 1. Simple GET Request
-```csharp
-var user = await client.GetAsync<User>("/api/users/me", ct);
-```
-
-### 2. POST with Body
-```csharp
-var request = new LoginRequest { Email = "user@example.com", Password = "pass" };
-var response = await client.PostAsync<LoginResponse>("/api/auth/login", request, ct);
-```
-
-### 3. Custom Options
-```csharp
-var options = RequestOptions.WithTimeout(60f);
-var data = await client.SendJsonAsync<Data>("/path", "GET", null, ct, options);
-```
-
-### 4. No Retry (Critical Operations)
-```csharp
-var result = await client.SendJsonAsync<Result>(
-    "/api/payment",
-    "POST",
-    paymentData,
-    ct,
-    RequestOptions.NoRetry
-);
-```
-
-### 5. Fluent API
-```csharp
-var user = await client
-    .Request("/users/1")
-    .Get()
-    .WithTimeout(10f)
-    .NoRetry()
-    .SendAsync<User>(ct);
-```
-
-### 6. Error Handling
-```csharp
-try {
-    await client.GetAsync<User>("/api/users/me", ct);
-} catch (ApiException ex) {
-    switch (ex.Category) {
-        case ApiErrorCategory.Unauthorized:
-            // Redirect to login
-            break;
-        case ApiErrorCategory.NetworkError:
-            // Show "no internet" message
-            break;
-        case ApiErrorCategory.Timeout:
-            // Show "slow connection" message
-            break;
-        default:
-            Debug.LogError($"Error: {ex}");
-            break;
-    }
-}
-```
-
-### 7. Cancellation
-```csharp
-private CancellationTokenSource _cts;
-
-void Start() {
-    _cts = new CancellationTokenSource();
-    LoadData(_cts.Token).Forget();
-}
-
-void OnDestroy() {
-    _cts?.Cancel();
-    _cts?.Dispose();
-}
-```
-
-### 8. Parallel Requests
-```csharp
-var (user, posts, comments) = await UniTask.WhenAll(
-    client.GetAsync<User>("/api/users/1", ct),
-    client.GetAsync<Post[]>("/api/posts?userId=1", ct),
-    client.GetAsync<Comment[]>("/api/comments?userId=1", ct)
-);
-```
-
-## Testing
-
-### With JSONPlaceholder (Public Test API)
-The `ExampleUsage.cs` uses https://jsonplaceholder.typicode.com:
-
-1. Attach `ExampleUsage` to a GameObject
-2. Run the scene
-3. Check Console for results
-
-### With Your API
-1. Update base URL in `ApiClientConfig.Create("https://your-api.com")`
-2. Set JWT token via `SimpleTokenProvider` or implement `RefreshableTokenProvider`
-3. Define your DTOs (request/response classes)
-4. Make requests
 
 ## Dependencies
 
-### Required
-- **Unity 2021.3+**
-- **UniTask** - For async/await support
-- **Newtonsoft.Json** - For JSON serialization
+- Unity 2021.3+
+- UniTask
+- Newtonsoft.Json
 
-### Installation
-```
-UniTask: https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask
-Newtonsoft.Json: com.unity.nuget.newtonsoft-json (via Package Manager)
-```
+Installed automatically when adding the package via UPM:
 
-## Extension Points
-
-### 1. Custom Token Provider
-Implement `ITokenProvider` for custom token logic:
-
-```csharp
-public class MyTokenProvider : ITokenProvider
-{
-    public async UniTask<string> GetAccessTokenAsync(CancellationToken ct)
-    {
-        // Your logic (e.g., refresh if expired)
-        return "token";
-    }
-}
+```text
+https://github.com/MohamedAlaa2180/AdvancedWebRequest.git?path=Assets/AdvancedWebRequestSDK#release/latest
 ```
 
-### 2. Custom Logger
-Implement `ILogger` for custom logging:
+## Extension points
 
-```csharp
-public class MyLogger : ILogger
-{
-    public void LogInfo(string message) { /* Your logic */ }
-    public void LogWarning(string message) { /* Your logic */ }
-    public void LogError(string message) { /* Your logic */ }
-}
-```
+- **ITokenProvider** — Custom JWT / refresh logic
+- **ILogger** — Custom log sinks
+- **RetryPolicy** — Custom retry rules
 
-### 3. Custom Retry Policy
-Extend `RetryPolicy` for custom retry logic:
+## Breaking changes in 1.1.0
 
-```csharp
-public class MyRetryPolicy : RetryPolicy
-{
-    public override bool ShouldRetry(ApiException ex, int attempt)
-    {
-        // Your custom retry logic
-        return base.ShouldRetry(ex, attempt);
-    }
-}
-```
+| Removed / changed | Replacement |
+|---|---|
+| `GetAsync`, `PostAsync`, `PutAsync`, `DeleteAsync` | Fluent `Request().Get/Post/Put/Delete().SendAsync()` |
+| Public `SendJsonAsync` | Internal — use `RequestBuilder` |
+| UPM path `Assets/AdvancedWebRequest` | `Assets/AdvancedWebRequestSDK` |
+| Per-class logging `[SerializeField]` | Project Settings → Advanced Web Request |
 
-## Performance
+## More docs
 
-- **Memory**: Minimal overhead (just wrapper objects)
-- **CPU**: JSON parsing on thread pool (non-blocking)
-- **Latency**: No additional latency vs raw UnityWebRequest
-- **Battery**: Optimized retry policies prevent excessive requests
-
-## Security Considerations
-
-1. **JWT Storage**: Store tokens securely (PlayerPrefs is NOT secure)
-2. **HTTPS**: Always use HTTPS in production
-3. **Token Refresh**: Implement proper token refresh to avoid storing long-lived tokens
-4. **Logging**: Don't log sensitive data (passwords, tokens) - truncated by default
-
-## Next Steps
-
-1. **Install Dependencies**: UniTask + Newtonsoft.Json
-2. **Configure**: Set your API base URL
-3. **Implement Auth**: Set up token provider
-4. **Define DTOs**: Create request/response classes
-5. **Test**: Use examples as reference
-6. **Production**: Add error handling and logging
-
-## Known Limitations
-
-1. **UnityWebRequest Limitations**: Inherits all UnityWebRequest constraints
-2. **WebGL CORS**: Subject to browser CORS policies
-3. **Download Progress**: Limited by UnityWebRequest API
-4. **File Uploads**: Multipart form not implemented (can be extended)
-5. **Certificate Pinning**: Not implemented (security concern)
-
-## Troubleshooting
-
-### "UniTask not found"
-Install via Package Manager: `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask`
-
-### "Newtonsoft.Json not found"
-Install via Package Manager: Add package `com.unity.nuget.newtonsoft-json`
-
-### "Timeout immediately"
-Check `TimeoutSeconds` configuration (default is 30s)
-
-### "Retry not working"
-Verify error category is retryable (check `ApiException.IsRetryable`)
-
-### "Token not injected"
-Ensure `ITokenProvider` is passed to `ApiClient` constructor
-
-## Support
-
-- Check `README.md` for feature documentation
-- See `QUICKSTART.md` for 5-minute setup
-- Review `Examples/` folder for usage patterns
-- Read `FEATURES.md` for comprehensive feature list
+- [README.md](README.md) — Feature documentation
+- [QUICKSTART.md](QUICKSTART.md) — 5-minute setup
+- [LOGGING.md](LOGGING.md) — Automatic logging guide
+- [FEATURES.md](FEATURES.md) — Comprehensive feature list
+- Import **Basic Examples** from Package Manager for runnable code

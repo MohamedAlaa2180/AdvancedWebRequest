@@ -2,11 +2,11 @@
 
 ## Overview
 
-The Advanced Web Request package includes **automatic logging** that eliminates the need for manual logging in your code. Simply configure the log level once, and all requests/responses are logged automatically.
+The Advanced Web Request package includes **automatic logging** that eliminates the need for manual logging in your code. Configure logging once in **Project Settings**, and all requests/responses are logged automatically.
 
-## Quick Comparison
+## Quick comparison
 
-### ❌ Before (Manual Logging)
+### Before (manual logging)
 
 ```csharp
 async UniTask LoadUser()
@@ -14,36 +14,32 @@ async UniTask LoadUser()
     try
     {
         Debug.Log($"Loading user from {url}...");
-        
+
         var user = await client.GetAsync<User>("/api/users/me");
-        
+
         Debug.Log($"✓ User loaded: {user.name}");
-        Debug.Log($"User data: {JsonConvert.SerializeObject(user)}");
     }
     catch (ApiException ex)
     {
-        Debug.LogError($"✗ Failed to load user");
-        Debug.LogError($"Status: {ex.StatusCode}");
-        Debug.LogError($"Error: {ex.Message}");
-        Debug.LogError($"Response: {ex.RawResponseBody}");
+        Debug.LogError($"✗ Failed: {ex.Message}");
     }
 }
 ```
 
-### ✅ After (Automatic Logging)
+### After (automatic logging)
+
+Configure once in **Edit → Project Settings → Advanced Web Request**, then:
 
 ```csharp
-var config = ApiClientConfig.Create("https://api.example.com");
-config.LogLevel = LogLevel.Detailed;  // Configure once
-config.LogResponseBody = true;
-
-var client = new ApiClient(config);
+var api = new ApiService("https://api.example.com");
 
 async UniTask LoadUser()
 {
-    // No manual logging needed!
-    var user = await client.GetAsync<User>("/api/users/me");
-    
+    var user = await api.Client
+        .Request("/api/users/me")
+        .Get()
+        .SendAsync<User>(api.Token);
+
     // Console automatically shows:
     // [API] → GET https://api.example.com/api/users/me
     // [API] ← 200 in 0.48s
@@ -51,45 +47,53 @@ async UniTask LoadUser()
 }
 ```
 
-## Log Levels
+## Editor configuration (recommended)
+
+Open **Edit → Project Settings → Advanced Web Request** (or **Advanced Web Request → Settings** from the menu):
+
+| Setting | Description |
+|---------|-------------|
+| **Log Level** | `None`, `Errors`, `Basic`, `Detailed`, `Verbose` |
+| **Log Request Body** | Include serialized request body in logs |
+| **Log Response Body** | Include response body in logs |
+| **Max Log Body Length** | Truncate long bodies (default 500) |
+| **Default Timeout (s)** | Applied via `ApiClientConfig.Create()` |
+
+Settings are stored in **EditorPrefs** (per developer machine), not committed to source control.
+
+Every call to `ApiClientConfig.Create()` automatically applies these defaults through the Editor bridge.
+
+## Log levels
 
 ### `LogLevel.None`
-**No logging at all.** Use for production builds to minimize log spam.
 
-```csharp
-config.LogLevel = LogLevel.None;
-```
+No logging. Use for production builds to minimize log spam.
 
 **Console output:** (nothing)
 
 ---
 
 ### `LogLevel.Errors`
-**Only logs errors.** Shows when requests fail, with full error details.
 
-```csharp
-config.LogLevel = LogLevel.Errors;
-```
+Only logs errors with full error details.
 
 **Console output:**
-```
+
+```text
 [API] ✗ Unauthorized: Invalid token
 [API]   Status Code: 401
 [API]   URL: GET https://api.example.com/users/me
-[API]   Error Message: Token has expired
 ```
 
 ---
 
-### `LogLevel.Basic` (Default)
-**Request + response summary.** Shows URL, method, status code, and timing.
+### `LogLevel.Basic` (default)
 
-```csharp
-config.LogLevel = LogLevel.Basic;
-```
+Request + response summary: URL, method, status code, and timing.
 
 **Console output:**
-```
+
+```text
 [API] → GET https://api.example.com/users/me
 [API] ← 200 in 0.48s
 ```
@@ -97,16 +101,12 @@ config.LogLevel = LogLevel.Basic;
 ---
 
 ### `LogLevel.Detailed`
-**Basic + request/response bodies** (when enabled). Great for debugging API issues.
 
-```csharp
-config.LogLevel = LogLevel.Detailed;
-config.LogRequestBody = true;   // Show request body
-config.LogResponseBody = true;  // Show response body
-```
+Basic + request/response bodies (when body logging is enabled). Great for debugging API issues.
 
 **Console output:**
-```
+
+```text
 [API] → POST https://api.example.com/auth/login
 [API] Request Body:
 {
@@ -124,215 +124,142 @@ config.LogResponseBody = true;  // Show response body
 ---
 
 ### `LogLevel.Verbose`
-**Everything.** Includes retry attempts, cancellations, and all debug info.
 
-```csharp
-config.LogLevel = LogLevel.Verbose;
-```
+Everything — retry attempts, cancellations, and debug info.
 
 **Console output:**
-```
+
+```text
 [API] → GET https://api.example.com/users/me
 [API] Request failed (attempt 1), retrying in 1000ms: Network error
 [API] → GET https://api.example.com/users/me
 [API] ← 200 in 1.23s
 ```
 
-## Configuration Options
+## Code-level overrides (optional)
 
-### Basic Configuration
+You can still override defaults per client:
 
 ```csharp
 var config = ApiClientConfig.Create("https://api.example.com");
+config.LogLevel = LogLevel.Detailed;
+config.LogRequestBody = true;
+config.LogResponseBody = true;
+config.MaxLogBodyLength = 500;
 
-config.LogLevel = LogLevel.Detailed;    // Control verbosity
-config.LogRequestBody = true;           // Log request bodies
-config.LogResponseBody = true;          // Log response bodies
-config.MaxLogBodyLength = 500;          // Truncate long bodies
-
-var client = new ApiClient(config);
+var api = new ApiService(config);
 ```
 
-### Inspector-Friendly (MonoBehaviour)
+For most projects, Project Settings alone is enough.
 
-```csharp
-public class ApiManager : MonoBehaviour
-{
-    [Header("Logging")]
-    [SerializeField] private LogLevel _logLevel = LogLevel.Basic;
-    [SerializeField] private bool _logRequestBody = false;
-    [SerializeField] private bool _logResponseBody = false;
-    
-    void Start()
-    {
-        var config = ApiClientConfig.Create("https://api.example.com");
-        config.LogLevel = _logLevel;
-        config.LogRequestBody = _logRequestBody;
-        config.LogResponseBody = _logResponseBody;
-        
-        var client = new ApiClient(config);
-    }
-}
-```
+## What gets logged automatically
 
-Now you can toggle logging settings directly in the Unity Inspector!
+### Requests
 
-## What Gets Logged Automatically
-
-### ✅ Requests
 - HTTP method (GET, POST, PUT, DELETE)
 - Full URL
-- Request body (if `LogRequestBody = true` and `LogLevel >= Detailed`)
+- Request body (if enabled and `LogLevel >= Detailed`)
 
-### ✅ Responses
+### Responses
+
 - HTTP status code
-- Response time (duration)
-- Response body (if `LogResponseBody = true` and `LogLevel >= Detailed`)
+- Response time
+- Response body (if enabled and `LogLevel >= Detailed`)
 
-### ✅ Errors
+### Errors
+
 - Error category (Timeout, NetworkError, Unauthorized, etc.)
 - HTTP status code
 - Error message
 - Request URL and method
 - Structured error details (if available)
-- Raw response body (fallback)
 
-### ✅ Retries
+### Retries
+
 - Attempt number
 - Delay before retry
 - Reason for retry
 
-### ✅ Cancellations
-- Which request was canceled
-- URL and method
-
 ## Examples
 
-### Example 1: Development Mode (Detailed Logging)
+### Development vs production
+
+Use Project Settings during development. For release builds, set log level to `Errors` or `None` before building, or override in code:
 
 ```csharp
-#if UNITY_EDITOR
-    config.LogLevel = LogLevel.Detailed;
-    config.LogResponseBody = true;
-#else
-    config.LogLevel = LogLevel.Basic;
+#if !DEBUG
+var config = ApiClientConfig.Create(baseUrl);
+config.LogLevel = LogLevel.Errors;
 #endif
 ```
 
-### Example 2: Production Mode (Errors Only)
+### Debugging authentication
 
-```csharp
-#if DEBUG
-    config.LogLevel = LogLevel.Detailed;
-#else
-    config.LogLevel = LogLevel.Errors;
-#endif
-```
+In Project Settings:
 
-### Example 3: Debugging Specific Issues
+- Log Level: `Detailed`
+- Log Request Body: on
+- Log Response Body: on
 
-```csharp
-// When debugging authentication issues
-config.LogLevel = LogLevel.Detailed;
-config.LogRequestBody = true;  // See what we're sending
-config.LogResponseBody = true; // See what server responds
+## Performance notes
 
-// When debugging performance
-config.LogLevel = LogLevel.Basic;  // Shows timing for each request
+- **`LogLevel.None`** — Zero overhead
+- **`LogLevel.Errors`** — Minimal, only on failures
+- **`LogLevel.Basic`** — Very low, string formatting only
+- **`LogLevel.Detailed`** — Moderate when logging bodies
+- **`LogLevel.Verbose`** — Higher overhead, debugging only
 
-// When testing retry logic
-config.LogLevel = LogLevel.Verbose;  // Shows all retry attempts
-```
+Body truncation (`MaxLogBodyLength`) prevents huge logs from impacting performance.
 
-## Performance Notes
+## Custom logging
 
-- **`LogLevel.None`** - Zero overhead, no performance impact
-- **`LogLevel.Errors`** - Minimal overhead, only logs on failures
-- **`LogLevel.Basic`** - Very low overhead, just string formatting
-- **`LogLevel.Detailed`** - Moderate overhead when logging bodies (JSON serialization)
-- **`LogLevel.Verbose`** - Higher overhead, use only for debugging
-
-Body truncation (`MaxLogBodyLength`) helps prevent huge logs from impacting performance.
-
-## Custom Logging
-
-If you need custom log formatting or want to send logs elsewhere (analytics, file, server):
+Implement `ILogger` to send logs to analytics, files, or crash reporting:
 
 ```csharp
 public class MyCustomLogger : ILogger
 {
     public void LogRequest(string method, string url, object body = null)
     {
-        // Send to your analytics service
         Analytics.LogEvent("api_request", new { method, url });
-        
-        // Also log to console
-        Debug.Log($"API: {method} {url}");
     }
-    
+
     public void LogResponse(int statusCode, float duration, string body = null)
     {
-        // Track API performance
         Analytics.LogTiming("api_response_time", duration);
-        
-        Debug.Log($"API: {statusCode} in {duration:F2}s");
     }
-    
+
     public void LogException(ApiException exception)
     {
-        // Send errors to crash reporting
         CrashReporter.LogError(exception);
-        
-        Debug.LogError($"API Error: {exception}");
     }
-    
-    // Required but can be simple
+
     public void LogInfo(string message) => Debug.Log(message);
     public void LogWarning(string message) => Debug.LogWarning(message);
     public void LogError(string message) => Debug.LogError(message);
 }
 
-var client = new ApiClient(config, tokenProvider, new MyCustomLogger());
+var api = new ApiService(config, tokenProvider, new MyCustomLogger());
 ```
 
-## Tips
+## Migrating from 1.0.x
 
-1. **Start with `LogLevel.Detailed`** during development
-2. **Switch to `LogLevel.Basic`** for testing builds
-3. **Use `LogLevel.Errors`** in production (or `None` for minimal overhead)
-4. **Enable body logging temporarily** when debugging specific API issues
-5. **Set `MaxLogBodyLength`** to prevent huge logs (default 500 characters)
-6. **Use conditional compilation** (`#if DEBUG`) to change log levels per platform
-
-## Benefits
-
-✅ **No manual logging code** - Save time and reduce boilerplate  
-✅ **Consistent format** - All logs look the same  
-✅ **Configurable verbosity** - One setting controls everything  
-✅ **Inspector-friendly** - Toggle in Unity without code changes  
-✅ **Performance-aware** - Disable in production easily  
-✅ **Rich error details** - Automatic structured error logging  
-✅ **Zero learning curve** - Works out of the box  
-
-## Migrating from Manual Logging
-
-If you have existing code with manual logging:
-
-1. Remove all `Debug.Log` calls from your API calls
-2. Configure `ApiClientConfig.LogLevel` once
-3. Let the package handle logging automatically
+1. Remove per-class `[SerializeField]` log fields from MonoBehaviours
+2. Configure logging in **Project Settings → Advanced Web Request**
+3. Remove manual `Debug.Log` / `Debug.LogError` around API calls
+4. Replace `GetAsync` / `PostAsync` with the fluent API
 
 **Before:**
+
 ```csharp
-Debug.Log($"Calling {url}...");
-var response = await client.GetAsync<T>(url);
-Debug.Log($"Success: {response}");
+[SerializeField] private LogLevel _logLevel = LogLevel.Detailed;
+config.LogLevel = _logLevel;
+var user = await client.GetAsync<User>("/api/users/me");
+Debug.Log($"Success: {user.name}");
 ```
 
 **After:**
-```csharp
-var response = await client.GetAsync<T>(url);
-// Logs automatically based on config.LogLevel
-```
 
-That's it! 🎉
+```csharp
+var user = await api.Client.Request("/api/users/me").Get().SendAsync<User>(api.Token);
+// Logs automatically from Project Settings
+```

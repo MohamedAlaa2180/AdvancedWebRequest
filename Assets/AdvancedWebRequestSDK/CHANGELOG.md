@@ -23,6 +23,7 @@ All notable changes to this project will be documented in this file.
   - `Runtime/` folder for core SDK code with Runtime assembly definition
   - `Editor/` folder for Editor-only code with Editor assembly definition
   - `Samples~/` folder for example code with Samples assembly definition
+- **UPM package path**: Renamed from `Assets/AdvancedWebRequest` to `Assets/AdvancedWebRequestSDK` — update your Git URL when upgrading
 - **Example Classes**: Refactored all examples to follow new patterns
   - Use ApiService instead of direct ApiClient + CancellationTokenSource
   - Removed manual Debug.Log calls (logging now driven by SDK settings)
@@ -56,12 +57,9 @@ All notable changes to this project will be documented in this file.
 - Request/response body logging with truncation support
 - Comprehensive examples and documentation
 
-### Added - API Methods
-- `GetAsync<T>()` - GET requests
-- `PostAsync<T>()` - POST requests with body
-- `PutAsync<T>()` - PUT requests with body
-- `DeleteAsync<T>()` - DELETE requests
-- `SendJsonAsync<T>()` - Generic method with full control
+### Added - API Methods (1.0.0 — replaced by fluent API in 1.1.0)
+
+- `GetAsync<T>()`, `PostAsync<T>()`, `PutAsync<T>()`, `DeleteAsync<T>()`, `SendJsonAsync<T>()` — removed in 1.1.0; use `client.Request(path).Get/Post/Put/Delete().SendAsync<T>()`
 - Fluent API: `client.Request(path).Get().WithTimeout().SendAsync<T>()`
 
 ### Features
@@ -84,8 +82,10 @@ All notable changes to this project will be documented in this file.
 - `AdvancedExamples.cs` - All features demonstration
 - `FluentApiExample.cs` - Fluent API patterns
 - `TokenRefreshExample.cs` - JWT token refresh implementation
-- `TestGetRequest.cs` - Real API test with configurable logging
+- `TestGetRequest.cs` - GET request against reqbin.com
 - `LoggingExample.cs` - Demonstrates all 5 log levels
+
+Import via Package Manager → **Advanced Web Request** → **Samples** → **Basic Examples**.
 
 ### Documentation
 - `README.md` - Full feature documentation with code examples

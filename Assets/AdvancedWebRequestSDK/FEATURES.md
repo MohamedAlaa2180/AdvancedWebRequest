@@ -9,7 +9,7 @@
 - Easy integration with Unity's main thread
 
 ```csharp
-var user = await client.GetAsync<User>("/api/users/me", cancellationToken);
+var user = await client.Request("/api/users/me").Get().SendAsync<User>(cancellationToken);
 ```
 
 ### 🔐 JWT Authentication
@@ -50,8 +50,7 @@ config.DefaultRetryPolicy = new RetryPolicy
 - Mobile-friendly defaults (30s)
 
 ```csharp
-var options = RequestOptions.WithTimeout(60f);
-await client.SendJsonAsync<T>("/path", "GET", null, ct, options);
+await client.Request("/path").Get().WithTimeout(60f).SendAsync<T>(ct);
 ```
 
 ### 🎯 Structured Error Handling
@@ -62,7 +61,7 @@ await client.SendJsonAsync<T>("/path", "GET", null, ct, options);
 
 ```csharp
 try {
-    await client.GetAsync<User>("/api/users/me");
+    await client.Request("/api/users/me").Get().SendAsync<User>();
 } catch (ApiException ex) {
     Debug.Log($"Category: {ex.Category}");
     Debug.Log($"Status: {ex.StatusCode}");
@@ -78,27 +77,21 @@ try {
 
 ```csharp
 var request = new LoginRequest { Email = "user@example.com", Password = "pass" };
-var response = await client.PostAsync<LoginResponse>("/auth/login", request);
+var response = await client.Request("/auth/login").Post().WithBody(request).SendAsync<LoginResponse>();
 ```
 
 ### 📝 Configurable Logging
+- **Project Settings page** for centralized defaults (EditorPrefs)
 - `ILogger` interface for custom logging
 - Request/response logging with timing
 - Retry attempt logging
-- Color-coded console output (optional)
+- Color-coded console output
 
-```csharp
-public class CustomLogger : ILogger
-{
-    public void LogInfo(string message) => Debug.Log($"[API] {message}");
-    public void LogWarning(string message) => Debug.LogWarning($"[API] {message}");
-    public void LogError(string message) => Debug.LogError($"[API] {message}");
-}
-```
+Configure in **Edit → Project Settings → Advanced Web Request**, or override per client in code.
 
-### 🔗 Fluent Request Builder
+### 🔗 Fluent Request Builder (public API)
+- **Single entry point** for all HTTP requests
 - Chainable API design
-- Readable request construction
 - Per-request configuration override
 
 ```csharp
@@ -111,22 +104,32 @@ var user = await client
     .SendAsync<User>();
 ```
 
+### 🧩 ApiService helper
+- Encapsulates `ApiClient` + `CancellationTokenSource`
+- Reduces boilerplate in MonoBehaviours and services
+- Implements `IDisposable` for clean shutdown
+
+```csharp
+var api = new ApiService("https://api.example.com");
+await api.Client.Request("/data").Get().SendAsync<Data>(api.Token);
+api.Dispose();
+```
+
 ### 🔁 Cancellation Support
 - Full CancellationToken integration
 - Proper cleanup on cancellation
 - Safe for scene transitions
 
 ```csharp
-private CancellationTokenSource _cts;
+private ApiService _api;
 
 void Start() {
-    _cts = new CancellationTokenSource();
+    _api = new ApiService("https://api.example.com");
     LoadData().Forget();
 }
 
 void OnDestroy() {
-    _cts?.Cancel();
-    _cts?.Dispose();
+    _api?.Dispose();
 }
 ```
 
@@ -154,9 +157,9 @@ Easy parallel request execution with UniTask:
 
 ```csharp
 var (user, posts, comments) = await UniTask.WhenAll(
-    client.GetAsync<User>("/api/users/1"),
-    client.GetAsync<Post[]>("/api/posts?userId=1"),
-    client.GetAsync<Comment[]>("/api/comments?userId=1")
+    client.Request("/api/users/1").Get().SendAsync<User>(),
+    client.Request("/api/posts?userId=1").Get().SendAsync<Post[]>(),
+    client.Request("/api/comments?userId=1").Get().SendAsync<Comment[]>()
 );
 ```
 

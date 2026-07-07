@@ -1,21 +1,27 @@
 # Automatic Logging Feature - Implementation Summary
 
-## What Was Added
+## What was added
 
-### New Feature: Automatic Request/Response Logging
-Users no longer need to manually log API calls. The package now handles all logging automatically based on configuration.
+Automatic request/response logging so users no longer need manual `Debug.Log` calls around API requests.
 
-## Changes Made
+## Current configuration (1.1.0+)
 
-### 1. New Log Level System (`ApiClientConfig.cs`)
-Added 5 configurable log levels:
-- `None` - No logging
-- `Errors` - Only errors
-- `Basic` - Request/response summary (default)
-- `Detailed` - With request/response bodies
-- `Verbose` - Everything including debug info
+Logging defaults are configured in **Edit → Project Settings → Advanced Web Request**:
 
-**New properties:**
+- Log Level (`None`, `Errors`, `Basic`, `Detailed`, `Verbose`)
+- Log Request Body
+- Log Response Body
+- Max Log Body Length
+- Default Timeout
+
+Settings are stored in **EditorPrefs** and applied automatically when `ApiClientConfig.Create()` is called via the `ApiClientConfig.OnCreate` delegate bridge in the Editor assembly.
+
+Per-client overrides in code are still supported.
+
+## Changes made
+
+### 1. Log level system (`Runtime/Models/ApiClientConfig.cs`)
+
 ```csharp
 public LogLevel LogLevel { get; set; } = LogLevel.Basic;
 public bool LogRequestBody { get; set; } = false;
@@ -23,242 +29,88 @@ public bool LogResponseBody { get; set; } = false;
 public int MaxLogBodyLength { get; set; } = 500;
 ```
 
-### 2. Enhanced Logger Interface (`ILogger.cs`)
-Added structured logging methods:
+### 2. Enhanced logger interface (`Runtime/Interfaces/ILogger.cs`)
+
 ```csharp
 void LogRequest(string method, string url, object body = null);
 void LogResponse(int statusCode, float duration, string body = null);
 void LogException(ApiException exception);
 ```
 
-### 3. Improved Default Logger (`DefaultLogger.cs`)
-- Color-coded console output
-- Structured request/response logging
-- Rich exception formatting with all error details
-- Automatic body truncation
+### 3. Default logger (`Runtime/Utils/DefaultLogger.cs`)
 
-### 4. Automatic Logging in ApiClient (`ApiClient.cs`)
-Logging is now automatically called at key points:
-- **Before request**: Logs method + URL + body (if enabled)
-- **After response**: Logs status + timing + body (if enabled)
-- **On error**: Logs full error details with structured data
-- **On retry**: Logs retry attempt + delay
-- **On cancel**: Logs cancellation notice
+Color-coded console output, structured request/response logging, body truncation.
 
-All logging respects the configured `LogLevel`.
+### 4. Automatic logging in ApiClient (`Runtime/Core/ApiClient.cs`)
 
-### 5. Updated Examples
-- `TestGetRequest.cs` - Shows Inspector-friendly log configuration
-- `LoggingExample.cs` - NEW! Demonstrates all log levels
-- Removed all manual logging from examples
+Logging at request start, response, error, retry, and cancellation — respecting configured `LogLevel`.
 
-### 6. Documentation Updates
-- `README.md` - Added automatic logging section
-- `QUICKSTART.md` - Updated with log configuration
-- `LOGGING.md` - NEW! Complete logging guide with examples
+### 5. Editor settings (`Editor/AdvancedWebRequestSettings.cs`)
 
-## Benefits
+Project Settings page replaces per-MonoBehaviour `[SerializeField]` logging fields.
 
-### For Users
-✅ **Zero manual logging** - No more Debug.Log in every API call  
-✅ **Consistent format** - All logs look professional  
-✅ **Inspector-friendly** - Toggle log levels without code changes  
-✅ **Production-ready** - Easily disable for release builds  
-✅ **Rich error details** - Automatic structured error reporting  
-✅ **Performance-aware** - Configurable verbosity  
+### 6. Updated samples (`Samples~/BasicExamples/`)
 
-### For Debugging
-✅ **See all requests** - Know exactly what's being called  
-✅ **Track timing** - Identify slow endpoints  
-✅ **View bodies** - Debug request/response data  
-✅ **Monitor retries** - See retry behavior  
-✅ **Catch errors** - Full error context automatically  
+- `LoggingExample.cs` — demonstrates log levels
+- All samples rely on Project Settings instead of Inspector log fields
 
-## Usage Comparison
+## Usage comparison
 
-### Before (Manual Logging Required)
+### Before (manual logging)
+
 ```csharp
 try
 {
     Debug.Log($"Calling {url}...");
-    
     var user = await client.GetAsync<User>("/api/users/me");
-    
     Debug.Log($"✓ Success: {user.name}");
-    Debug.Log($"Response: {JsonConvert.SerializeObject(user)}");
 }
 catch (ApiException ex)
 {
-    Debug.LogError($"✗ Failed: {ex.Category}");
-    Debug.LogError($"Status: {ex.StatusCode}");
-    Debug.LogError($"Error: {ex.Message}");
-    if (ex.StructuredError != null)
-    {
-        Debug.LogError($"Code: {ex.StructuredError.Code}");
-    }
+    Debug.LogError($"✗ Failed: {ex.Message}");
 }
 ```
 
-### After (Automatic Logging)
+### After (automatic logging)
+
+Configure **Project Settings → Advanced Web Request**, then:
+
 ```csharp
-var config = ApiClientConfig.Create("https://api.example.com");
-config.LogLevel = LogLevel.Detailed;
-config.LogResponseBody = true;
+var api = new ApiService("https://api.example.com");
 
-var client = new ApiClient(config);
+var user = await api.Client
+    .Request("/api/users/me")
+    .Get()
+    .SendAsync<User>(api.Token);
 
-// Just make the call - logging happens automatically!
-var user = await client.GetAsync<User>("/api/users/me");
-
-// Console shows:
-// [API] → GET https://api.example.com/api/users/me
-// [API] ← 200 in 0.48s
-// [API] Response Body: {"id":1,"name":"John","email":"john@example.com"}
+// Console shows request, response, timing, and bodies (if enabled)
 ```
 
-## Migration Guide
+## Migration guide
 
-### Step 1: Configure Log Level
-Add logging configuration to your ApiClient setup:
-```csharp
-var config = ApiClientConfig.Create(baseUrl);
-config.LogLevel = LogLevel.Detailed;  // Choose your level
-config.LogResponseBody = true;        // Optional
-```
+1. Update UPM path to `Assets/AdvancedWebRequestSDK` if upgrading from 1.0.x
+2. Open **Project Settings → Advanced Web Request** and set log preferences
+3. Remove per-class `[SerializeField]` log fields from MonoBehaviours
+4. Remove manual `Debug.Log` calls around API requests
+5. Use the fluent API: `client.Request(path).Get().SendAsync<T>(ct)`
 
-### Step 2: Remove Manual Logging
-Delete all manual Debug.Log calls from your API request methods.
+## Files (current layout)
 
-### Step 3: Test
-Run your app and see automatic logging in action!
+| Path | Role |
+|------|------|
+| `Runtime/Models/ApiClientConfig.cs` | Log config + `OnCreate` delegate |
+| `Runtime/Interfaces/ILogger.cs` | Logger interface |
+| `Runtime/Utils/DefaultLogger.cs` | Default console logger |
+| `Runtime/Core/ApiClient.cs` | Automatic logging calls |
+| `Editor/AdvancedWebRequestSettings.cs` | Project Settings UI |
+| `Samples~/BasicExamples/LoggingExample.cs` | Sample |
+| `LOGGING.md` | User guide |
 
-### Step 4: Adjust for Production
-```csharp
-#if DEBUG
-    config.LogLevel = LogLevel.Detailed;
-#else
-    config.LogLevel = LogLevel.Errors;  // Or None
-#endif
-```
+## Performance impact
 
-## Configuration Examples
+- `LogLevel.None` — zero overhead
+- `LogLevel.Errors` — minimal
+- `LogLevel.Basic` — very low
+- `LogLevel.Detailed` / `Verbose` — use for debugging only
 
-### Development (Verbose Logging)
-```csharp
-config.LogLevel = LogLevel.Detailed;
-config.LogRequestBody = true;
-config.LogResponseBody = true;
-```
-
-### Testing (Basic Logging)
-```csharp
-config.LogLevel = LogLevel.Basic;
-```
-
-### Production (Errors Only)
-```csharp
-config.LogLevel = LogLevel.Errors;
-```
-
-### Production (No Logging)
-```csharp
-config.LogLevel = LogLevel.None;
-```
-
-## Log Output Examples
-
-### Basic Level
-```
-[API] → GET https://api.example.com/users/1
-[API] ← 200 in 0.48s
-```
-
-### Detailed Level (with bodies)
-```
-[API] → POST https://api.example.com/auth/login
-[API] Request Body:
-{
-  "email": "user@example.com",
-  "password": "***"
-}
-[API] ← 200 in 0.52s
-[API] Response Body:
-{
-  "token": "eyJhbGc...",
-  "userId": "123"
-}
-```
-
-### Error Logging
-```
-[API] → GET https://api.example.com/users/me
-[API] ✗ Unauthorized: Token has expired
-[API]   Status Code: 401
-[API]   URL: GET https://api.example.com/users/me
-[API]   Error Code: TOKEN_EXPIRED
-[API]   Error Message: Your session has expired, please login again
-```
-
-### Retry Logging (Verbose)
-```
-[API] → GET https://api.example.com/data
-[API] Request failed (attempt 1), retrying in 1000ms: Network error
-[API] → GET https://api.example.com/data
-[API] ← 200 in 1.23s
-```
-
-## Backward Compatibility
-
-✅ **Fully backward compatible** - Existing code continues to work  
-✅ **Default behavior** - `LogLevel.Basic` provides sensible defaults  
-✅ **Optional opt-in** - Users can keep their manual logging if desired  
-
-## Performance Impact
-
-- **LogLevel.None**: Zero overhead ✅
-- **LogLevel.Errors**: Minimal, only on failures ✅
-- **LogLevel.Basic**: Very low, just string formatting ✅
-- **LogLevel.Detailed**: Moderate with body logging ⚠️
-- **LogLevel.Verbose**: Higher, use for debugging only ⚠️
-
-Body truncation (`MaxLogBodyLength = 500`) prevents large logs from impacting performance.
-
-## Files Modified
-
-1. `Models/ApiClientConfig.cs` - Added LogLevel enum and config properties
-2. `Interfaces/ILogger.cs` - Added structured logging methods
-3. `Utils/DefaultLogger.cs` - Enhanced with structured formatting
-4. `Core/ApiClient.cs` - Added automatic logging calls throughout
-5. `Examples/TestGetRequest.cs` - Updated to show new approach
-6. `README.md` - Added automatic logging documentation
-7. `QUICKSTART.md` - Updated with log configuration
-
-## Files Created
-
-1. `Examples/LoggingExample.cs` - Demonstrates all log levels
-2. `LOGGING.md` - Complete logging guide
-3. `CHANGELOG_LOGGING.md` - This file
-
-## Testing
-
-To test the new logging system:
-1. Attach `LoggingExample.cs` to a GameObject
-2. Enable the log levels you want to test in Inspector
-3. Run the scene
-4. Observe different log outputs in Console
-
-## Future Enhancements (Optional)
-
-- [ ] Log filtering by endpoint
-- [ ] Log output to file
-- [ ] Log aggregation/analytics integration
-- [ ] Request/response size logging
-- [ ] Header logging option
-- [ ] Custom log formatters
-- [ ] Async logging to prevent blocking
-
-## Summary
-
-This update transforms the Advanced Web Request package from a great HTTP client into a **developer-friendly, production-ready** solution with zero-configuration logging that "just works" while remaining fully customizable for advanced users.
-
-**Line count saved:** Users save ~10-20 lines of logging code per API call! 🎉
+Body truncation (`MaxLogBodyLength`) limits log size impact.

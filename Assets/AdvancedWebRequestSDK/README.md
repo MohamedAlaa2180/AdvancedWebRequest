@@ -6,187 +6,192 @@ A production-ready HTTP client built on top of Unity's UnityWebRequest with mode
 
 Add via **Package Manager → + → Add package from git URL** using:
 
-`https://github.com/MohamedAlaa2180/AdvancedWebRequest.git?path=Assets/AdvancedWebRequest#release/latest`
+`https://github.com/MohamedAlaa2180/AdvancedWebRequest.git?path=Assets/AdvancedWebRequestSDK#release/latest`
 
 Or add to `Packages/manifest.json` as `com.mohamedalaa2180.advancedwebrequest` with that URL. See the [repository README](https://github.com/MohamedAlaa2180/AdvancedWebRequest/blob/release/latest/README.md) for details.
 
+Pin a specific release with `#v1.1.0` instead of `#release/latest`.
+
+### Samples
+
+In Package Manager, select **Advanced Web Request** → **Samples** → import **Basic Examples**.
+
 ## Features
 
-- ✅ **UniTask async/await** - Clean async code with proper cancellation
-- ✅ **JWT Authentication** - Automatic Bearer token injection
-- ✅ **Retry with Backoff** - Exponential backoff + jitter for mobile networks
-- ✅ **Timeout Control** - Hard timeouts to prevent hanging requests
-- ✅ **Structured Errors** - Typed error responses with fallback
-- ✅ **JSON Serialization** - Newtonsoft.Json integration
-- ✅ **Automatic Logging** - Configurable log levels with zero manual logging needed
-- ✅ **Cancellation Support** - CancellationToken for clean cancellation
+- ✅ **UniTask async/await** — Clean async code with proper cancellation
+- ✅ **Fluent request API** — Single entry point: `Request().Get().SendAsync<T>()`
+- ✅ **ApiService helper** — Owns `ApiClient` + `CancellationTokenSource` lifecycle
+- ✅ **Editor Project Settings** — Centralized logging and default timeout
+- ✅ **JWT Authentication** — Automatic Bearer token injection
+- ✅ **Retry with Backoff** — Exponential backoff + jitter for mobile networks
+- ✅ **Timeout Control** — Hard timeouts to prevent hanging requests
+- ✅ **Structured Errors** — Typed error responses with fallback
+- ✅ **JSON Serialization** — Newtonsoft.Json integration
+- ✅ **Automatic Logging** — Configurable log levels with zero manual logging needed
+- ✅ **Cancellation Support** — CancellationToken for clean cancellation
 
 ## Quick Start
 
-### 1. Basic Setup
+### 1. Configure logging (Editor)
+
+Open **Edit → Project Settings → Advanced Web Request** and set:
+
+- Log level
+- Request/response body logging
+- Default timeout
+
+These defaults apply automatically when you call `ApiClientConfig.Create()`.
+
+### 2. Basic setup
 
 ```csharp
 using AdvancedWebRequest.Core;
 using Cysharp.Threading.Tasks;
 
-var config = ApiClientConfig.Create("https://api.example.com");
+// Simple setup
+var api = new ApiService("https://api.example.com");
+
+// With JWT
 var tokenProvider = new SimpleTokenProvider("your-jwt-token");
-var client = new ApiClient(config, tokenProvider);
+var apiWithAuth = new ApiService(ApiClientConfig.Create("https://api.example.com"), tokenProvider);
 ```
 
-### 2. Making Requests
+### 3. Making requests
+
+All HTTP calls use the fluent builder:
 
 ```csharp
-// GET request
-var user = await client.GetAsync<UserResponse>("/users/me");
+// GET
+var user = await api.Client
+    .Request("/users/me")
+    .Get()
+    .SendAsync<UserResponse>(api.Token);
 
-// POST request
+// POST
 var loginRequest = new LoginRequest { Email = "user@example.com", Password = "pass" };
-var response = await client.PostAsync<LoginResponse>("/auth/login", loginRequest);
+var response = await api.Client
+    .Request("/auth/login")
+    .Post()
+    .WithBody(loginRequest)
+    .SendAsync<LoginResponse>(api.Token);
 
-// PUT request
+// PUT
 var updateRequest = new UpdateProfileRequest { Name = "New Name" };
-await client.PutAsync<UserResponse>("/users/me", updateRequest);
+await api.Client
+    .Request("/users/me")
+    .Put()
+    .WithBody(updateRequest)
+    .SendAsync<UserResponse>(api.Token);
 
-// DELETE request
-await client.DeleteAsync<object>("/users/123");
+// DELETE
+await api.Client
+    .Request("/users/123")
+    .Delete()
+    .SendAsync<object>(api.Token);
 ```
 
-### 3. Cancellation
+Pass request bodies as objects — the SDK serializes them. Do **not** call `JsonConvert.SerializeObject` yourself.
+
+### 4. MonoBehaviour pattern
 
 ```csharp
-private CancellationTokenSource _cts;
-
-async UniTask LoadData()
+public class MyScreen : MonoBehaviour
 {
-    _cts = new CancellationTokenSource();
-    
-    try
-    {
-        var data = await client.GetAsync<DataResponse>("/data", _cts.Token);
-    }
-    catch (ApiException ex) when (ex.Category == ApiErrorCategory.Canceled)
-    {
-        Debug.Log("Request canceled");
-    }
-}
+    [SerializeField] private string _baseUrl = "https://api.example.com";
+    [SerializeField] private float _timeout = 30f;
 
-void OnDestroy()
-{
-    _cts?.Cancel();
-    _cts?.Dispose();
+    private ApiService _api;
+
+    void Awake() => _api = new ApiService(_baseUrl);
+    void OnDestroy() => _api.Dispose();
+
+    async UniTask LoadData()
+    {
+        await _api.Client
+            .Request("/data")
+            .Get()
+            .WithTimeout(_timeout)
+            .SendAsync<DataResponse>(_api.Token);
+    }
 }
 ```
 
-### 4. Error Handling
+### 5. Error handling
 
 ```csharp
 try
 {
-    var response = await client.GetAsync<UserResponse>("/users/me");
+    var response = await api.Client
+        .Request("/users/me")
+        .Get()
+        .SendAsync<UserResponse>(api.Token);
 }
 catch (ApiException ex)
 {
     switch (ex.Category)
     {
         case ApiErrorCategory.Unauthorized:
-            Debug.Log("Need to login");
+            // Redirect to login
             break;
         case ApiErrorCategory.Timeout:
-            Debug.Log("Request timed out");
+            // Show slow connection message
             break;
         case ApiErrorCategory.NetworkError:
-            Debug.Log("No internet connection");
+            // Show offline message
             break;
         default:
-            Debug.LogError($"Error: {ex.Message}");
-            break;
-    }
-    
-    if (ex.StructuredError != null)
-    {
-        Debug.Log($"Error code: {ex.StructuredError.Code}");
+            throw;
     }
 }
 ```
 
-### 5. Automatic Logging (No Manual Logging Needed!)
-
-The package handles all logging automatically based on your configuration:
-
-```csharp
-var config = ApiClientConfig.Create("https://api.example.com");
-
-// Configure logging (all optional)
-config.LogLevel = LogLevel.Detailed;     // None, Errors, Basic, Detailed, Verbose
-config.LogRequestBody = true;            // Show request bodies
-config.LogResponseBody = true;           // Show response bodies
-config.MaxLogBodyLength = 500;           // Truncate long bodies
-
-var client = new ApiClient(config);
-
-// That's it! All requests are now automatically logged
-var user = await client.GetAsync<User>("/users/me");
-// Console: [API] → GET https://api.example.com/users/me
-// Console: [API] ← 200 in 0.48s
-// Console: [API] Response Body: {"id":1,"name":"John"}
-```
-
-**Log Levels:**
-- `None` - No logging at all
-- `Errors` - Only log errors and exceptions
-- `Basic` - Request URL + response status + timing (default)
-- `Detailed` - Basic + request/response bodies (if enabled)
-- `Verbose` - Everything including retry attempts and debug info
-
-**Inspector-Friendly:** All log settings can be configured as `[SerializeField]` for easy toggling in Unity Inspector!
-
-### 6. Custom Options
+### 6. Request options
 
 ```csharp
 // Custom timeout
-var options = RequestOptions.WithTimeout(60f);
-var data = await client.SendJsonAsync<DataResponse>("/large-data", "GET", null, default, options);
+await api.Client
+    .Request("/large-data")
+    .Get()
+    .WithTimeout(60f)
+    .SendAsync<DataResponse>(api.Token);
 
-// No retry
-var criticalData = await client.SendJsonAsync<Response>("/critical", "POST", body, default, RequestOptions.NoRetry);
+// No retry (critical operations)
+await api.Client
+    .Request("/payment")
+    .Post()
+    .WithBody(paymentData)
+    .NoRetry()
+    .SendAsync<PaymentResponse>(api.Token);
 
-// Aggressive retry
-var config = ApiClientConfig.Create("https://api.example.com");
-config.DefaultRetryPolicy = RetryPolicy.Aggressive;
+// Custom header
+await api.Client
+    .Request("/users/me")
+    .Get()
+    .WithHeader("X-Custom", "value")
+    .SendAsync<UserResponse>(api.Token);
 ```
 
-### 7. Advanced: Token Refresh
+### 7. Token refresh
 
-```csharp
-public class RefreshableTokenProvider : ITokenProvider
-{
-    private string _accessToken;
-    private string _refreshToken;
-    private DateTime _expiresAt;
+See `Samples~/BasicExamples/TokenRefreshExample.cs` after importing samples.
 
-    public async UniTask<string> GetAccessTokenAsync(CancellationToken ct)
-    {
-        if (DateTime.UtcNow < _expiresAt)
-            return _accessToken;
+## Package layout
 
-        await RefreshTokenAsync(ct);
-        return _accessToken;
-    }
-
-    private async UniTask RefreshTokenAsync(CancellationToken ct)
-    {
-        // Call refresh endpoint
-        // Update _accessToken and _expiresAt
-    }
-}
+```
+Assets/AdvancedWebRequestSDK/
+├── Runtime/          # Core SDK (ApiClient, RequestBuilder, ApiService, …)
+├── Editor/           # Project Settings page
+├── Samples~/         # Optional importable examples
+├── package.json
+└── README.md
 ```
 
 ## Configuration
 
-### Retry Policy
+### Retry policy
 
 ```csharp
+var config = ApiClientConfig.Create("https://api.example.com");
 config.DefaultRetryPolicy = new RetryPolicy
 {
     MaxRetries = 3,
@@ -196,61 +201,52 @@ config.DefaultRetryPolicy = new RetryPolicy
 };
 ```
 
-### Default Headers
+### Default headers
 
 ```csharp
 config.DefaultHeaders["X-App-Version"] = Application.version;
 config.DefaultHeaders["X-Platform"] = Application.platform.ToString();
 ```
 
-### Custom Logger (Optional)
-
-The default logger works great for most cases, but you can customize it:
+### Custom logger
 
 ```csharp
-public class CustomLogger : ILogger
-{
-    // Basic logging
-    public void LogInfo(string message) => Debug.Log(message);
-    public void LogWarning(string message) => Debug.LogWarning(message);
-    public void LogError(string message) => Debug.LogError(message);
-    
-    // Structured logging (called automatically by the client)
-    public void LogRequest(string method, string url, object body = null)
-    {
-        // Your custom request logging
-    }
-    
-    public void LogResponse(int statusCode, float duration, string body = null)
-    {
-        // Your custom response logging
-    }
-    
-    public void LogException(ApiException exception)
-    {
-        // Your custom error logging
-    }
-}
-
 var client = new ApiClient(config, tokenProvider, new CustomLogger());
 ```
 
-## Error Categories
+See [LOGGING.md](LOGGING.md) for the full logging guide.
 
-- `Canceled` - Request was canceled
-- `Timeout` - Request exceeded timeout
-- `NetworkError` - Connection/DNS/TLS errors
-- `Unauthorized` - HTTP 401
-- `Forbidden` - HTTP 403
-- `NotFound` - HTTP 404
-- `RateLimited` - HTTP 429
-- `BadRequest` - HTTP 4xx
-- `ServerError` - HTTP 5xx
-- `JsonParseError` - Failed to parse JSON
-- `Unknown` - Unexpected errors
+## Error categories
+
+- `Canceled` — Request was canceled
+- `Timeout` — Request exceeded timeout
+- `NetworkError` — Connection/DNS/TLS errors
+- `Unauthorized` — HTTP 401
+- `Forbidden` — HTTP 403
+- `NotFound` — HTTP 404
+- `RateLimited` — HTTP 429
+- `BadRequest` — HTTP 4xx
+- `ServerError` — HTTP 5xx
+- `JsonParseError` — Failed to parse JSON
+- `Unknown` — Unexpected errors
 
 ## Requirements
 
 - Unity 2021.3+
-- UniTask package
-- Newtonsoft.Json package
+- UniTask (installed automatically via UPM)
+- Newtonsoft.Json (installed automatically via UPM)
+
+## More docs
+
+- [QUICKSTART.md](QUICKSTART.md) — 5-minute setup
+- [GETTING_STARTED.md](GETTING_STARTED.md) — Step-by-step tutorial
+- [LOGGING.md](LOGGING.md) — Automatic logging guide
+- [FEATURES.md](FEATURES.md) — Full feature list
+- [CHANGELOG.md](CHANGELOG.md) — Version history
+
+## Migrating from 1.0.x
+
+1. Update your UPM Git URL path to `Assets/AdvancedWebRequestSDK`.
+2. Replace `GetAsync` / `PostAsync` / `PutAsync` / `DeleteAsync` / `SendJsonAsync` with the fluent API.
+3. Move logging config from per-class `[SerializeField]` fields to **Project Settings → Advanced Web Request**.
+4. Consider `ApiService` instead of managing `ApiClient` + `CancellationTokenSource` manually.
